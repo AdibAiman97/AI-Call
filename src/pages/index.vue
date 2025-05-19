@@ -1,5 +1,8 @@
 <template>
-  <HelloWorld />
+  <div>
+    index.vue
+    /home page
+  </div>
 </template>
 
 <script lang="ts" setup>

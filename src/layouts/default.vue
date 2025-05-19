@@ -1,7 +1,7 @@
 <template>
   <v-app>
     <HeaderComp :toggleDrawer="toggleDrawer" />
-    <v-main>
+    <v-main class="fill-height ma-10">
       <SidePanel :open="isDrawerOpen" />
       <router-view />
     </v-main>
