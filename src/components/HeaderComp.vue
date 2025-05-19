@@ -8,17 +8,15 @@
 
     <v-col cols="5">
       <v-row>
-        <v-col class="d-flex"
-          ><img width="120" src="../assets/voxis.png" alt=""
-        /></v-col>
+        <v-col class="d-flex">
+          <img width="120" src="../assets/voxis.png" alt=""/>
+        </v-col>
       </v-row>
     </v-col>
 
     <v-col cols="6">
       <v-row class="d-flex justify-end">
-        <div
-          class="d-flex align-center ga-3 bg-success px-3 rounded-xl"
-        >
+        <div class="d-flex align-center ga-3 bg-success px-3 rounded-xl">
           <div class="d-flex align-center">
             <v-avatar size="10" color="#34D399"></v-avatar>
           </div>
@@ -34,16 +32,15 @@
 </template>
 
 <script setup>
-import SvgIcon from '@jamescoyle/vue-icon';
-import { mdiMenu } from '@mdi/js';
+import SvgIcon from "@jamescoyle/vue-icon";
+import { mdiMenu } from "@mdi/js";
 
 const path = mdiMenu;
 
 const props = defineProps({
   toggleDrawer: {
     type: Function,
-    required: true
-  }
+    required: true,
+  },
 });
-
 </script>
