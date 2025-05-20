@@ -5,7 +5,7 @@
 
     <v-row align="center" justify="space-between" class="elevation-2 pa-4 mb-4">
       <v-col cols="6" class="pa-4 text-foreground"><h1>Call Summary</h1></v-col>
-      <v-btn @click="export">Export</v-btn>
+      <v-btn @click="export"><v-icon> mdi-export </v-icon> Export</v-btn>
     </v-row>
 
     <!-- Summary Content -->
