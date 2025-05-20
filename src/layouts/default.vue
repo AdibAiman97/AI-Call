@@ -1,6 +1,6 @@
 <template>
   <v-app>
-    <HeaderComp :toggleDrawer="toggleDrawer" />
+    <HeaderBar :toggleDrawer="toggleDrawer" />
     <v-main class="fill-height ma-10">
       <SidePanel :open="isDrawerOpen" />
       <router-view />
