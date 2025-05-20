@@ -1,6 +1,21 @@
 <template>
   <div>
-
+    <h1 class="d-flex justify-space-between text-foreground">
+      Appointment
+      <div class="d-flex ga-2">
+        <v-btn class="text-capitalize text-foreground">
+          <ListFilter :size="20" />
+          Filter
+        </v-btn>
+        <v-btn class="bg-primary text-capitalize">
+          <Plus :size="20" />
+          Add Appointment
+        </v-btn>
+      </div>
+    </h1>
+    <p class="text-foreground text-body-2">
+      Manage your upcoming customer meetings
+    </p>
     <v-calendar :interval-minutes="30" :interval-height="48" ref="calendar" v-model="value" :events="events"
       :view-mode="type" :weekdays="days">
     </v-calendar>
@@ -10,6 +25,7 @@
 
 <script setup>
 import { useDate } from 'vuetify'
+import { Plus, ListFilter } from 'lucide-vue-next';
 
 // Values
 const type = ref('week');
