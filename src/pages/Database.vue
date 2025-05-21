@@ -30,7 +30,7 @@
               style="width: 100%;"
             ></v-textarea>
             <!-- Buttons -->
-            <v-row justify="end">
+            <v-row justify="start">
               <v-btn variant="outlined" class="mr-2" color="grey">
                 <p class="text-capitalize ma-0">Cancel</p>
               </v-btn>
