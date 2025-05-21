@@ -7,19 +7,23 @@
 // Styles
 import '@mdi/font/css/materialdesignicons.css'
 import 'vuetify/styles'
+import { VCalendar } from 'vuetify/labs/VCalendar'
 
 // Composables
 import { createVuetify } from 'vuetify'
 
 // https://vuetifyjs.com/en/introduction/why-vuetify/#feature-guides
 export default createVuetify({
+  components: {
+    VCalendar,
+  },
   theme: {
     defaultTheme: 'dark',
     themes: {
       dark: {
           colors: {
             background: '#111827',
-            foreground: '#D1D5DB',
+            foreground: '#F9FAFB',
             surface: '#1F2937',
             primary: '#2EC4B6',
             secondary: '#2D3748',
