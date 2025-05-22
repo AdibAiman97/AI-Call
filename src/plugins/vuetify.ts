@@ -32,6 +32,7 @@ export default createVuetify({
             success: '#064E3B',
             warning: '#FFA726',
             error: '#7F1D1D',
+            icon: '#1E40AF',
           },
       },
     },
