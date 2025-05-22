@@ -9,7 +9,7 @@
       <img width="120" src="../assets/voxis.png" alt="" />
     </template>
 
-    <template v-if="onCall" v-slot:append>
+    <template v-if="callStore.isInCall" v-slot:append>
       <div class="d-flex align-center ga-3 bg-success px-3 rounded-xl">
         <div class="d-flex align-center">
           <v-avatar size="10" color="#34D399"></v-avatar>
@@ -25,7 +25,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
+import { useCallStore } from "@/stores/call.ts";
 
 const props = defineProps({
   toggleDrawer: {
@@ -34,39 +35,46 @@ const props = defineProps({
   },
 });
 
+const callStore = useCallStore();
+
 const elapsedSeconds = ref(0);
 let timer = null;
 
-const onCall = ref(true);
-
 const formattedTime = computed(() => {
-  const hours = Math.floor(elapsedSeconds.value / 3600);
-  const minutes = Math.floor((elapsedSeconds.value % 3600) / 60);
-  const seconds = elapsedSeconds.value % 60;
 
-  const hh = hours > 0 ? String(hours).padStart(2, "0") + ":" : "";
-  const mm = String(minutes).padStart(2, "0");
-  const ss = String(seconds).padStart(2, "0");
-  return `${hh}${mm}:${ss}`;
+//   const hours = Math.floor(elapsedSeconds.value / 3600);
+//   const minutes = Math.floor((elapsedSeconds.value % 3600) / 60);
+//   const seconds = elapsedSeconds.value % 60;
+// 
+//   const hh = hours > 0 ? String(Math.floor(elapsedSeconds.value / 3600)).padStart(2, "0") + ":" : "";
+//   const mm = String(Math.floor(elapsedSeconds.value / 60)).padStart(2, "0");
+//   const ss = String(elapsedSeconds.value % 60).padStart(2, "0");
+//   return `${hh}${mm}:${ss}`;
+
+  const min = String(Math.floor(elapsedSeconds.value / 60)).padStart(2, "0");
+  const sec = String(elapsedSeconds.value % 60).padStart(2, "0");
+  return `${min}:${sec}`;
 });
 
-function startTimer() {
-  timer = setInterval(() => {
-    elapsedSeconds.value++;
-  }, 1000);
-}
-
-function endCall() {
-  clearInterval(timer);
-  // Add any other cleanup or call termination logic here
-  alert("Call ended");
-}
-
-onMounted(() => {
-  startTimer();
-});
+// Watch when the call starts/stops
+watch(
+  () => callStore.isInCall,
+  (inCall) => {
+    if (inCall) {
+      elapsedSeconds.value = 0;
+      timer = setInterval(() => {
+        elapsedSeconds.value++;
+      }, 1000);
+    } else {
+      if (timer) clearInterval(timer);
+      timer = null;
+      elapsedSeconds.value = 0;
+    }
+  },
+  { immediate: true }
+);
 
 onUnmounted(() => {
-  clearInterval(timer);
+  if (timer) clearInterval(timer);
 });
 </script>

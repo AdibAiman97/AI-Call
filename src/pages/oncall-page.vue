@@ -18,15 +18,15 @@
     </div>
 
     <div class="d-flex align-center justify-center ga-8">
-      <v-btn class="bg-white" size="70" rounded="circle">
+      <v-btn class="bg-foreground" size="70" rounded="circle">
         <v-icon>
           <volume2 />
         </v-icon>
       </v-btn>
 
-      <v-btn class="bg-red" size="70" rounded="circle">
+      <v-btn @click="callStore.endCall()" to="/" class="bg-error" size="70" rounded="circle">
         <v-icon>
-          <phone color="black" />
+          <phone color="white" />
         </v-icon>
       </v-btn>
     </div>
@@ -35,4 +35,7 @@
 
 <script setup>
 import { AudioLines, Volume2, Phone } from "lucide-vue-next";
+import { useCallStore } from '@/stores/call'
+
+const callStore = useCallStore()
 </script>

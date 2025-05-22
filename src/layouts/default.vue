@@ -1,8 +1,9 @@
 <template>
   <v-app>
     <HeaderBar :toggleDrawer="toggleDrawer" />
-    <v-main class="fill-height ma-10">
-      <SidePanel :open="isDrawerOpen" />
+    <SidePanel :open="isDrawerOpen" />
+    
+    <v-main class="min-h-screen ma-10">
       <router-view />
     </v-main>
   </v-app>
