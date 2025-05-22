@@ -1,11 +1,7 @@
 <template>
-  <v-app-bar :elevation="2" class="pr-4">
+  <v-app-bar :elevation="2" class="pr-4 position-relative">
     <template v-slot:prepend>
-      <v-app-bar-nav-icon
-        @click="toggleDrawer"
-        class="text-foreground mx-2"
-        :size="40"
-      ></v-app-bar-nav-icon>
+      <v-app-bar-nav-icon @click="toggleDrawer" class="text-foreground mx-2" :size="40"></v-app-bar-nav-icon>
       <img width="120" src="../assets/voxis.png" alt="" />
     </template>
 
@@ -24,7 +20,7 @@
   </v-app-bar>
 </template>
 
-<script setup>
+<script setup lang="js">
 import { ref, onMounted, onUnmounted } from "vue";
 
 const props = defineProps({
