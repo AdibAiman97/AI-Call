@@ -18,28 +18,14 @@ import { Phone, PhoneOff } from 'lucide-vue-next'
 
 let socket: WebSocket
 let audioCtx: AudioContext
-let processor: ScriptProcessorNode
+let processor: AudioWorkletNode
 let source: MediaStreamAudioSourceNode
+let stream: MediaStream
 
 const transcript = ref("Transcript here")
-const url = "localhost:8000"
+const url = "localhost:8000/stt2"
 
-function convertToInt16(float32: Float32Array): ArrayBuffer {
-  const buffer = new ArrayBuffer(float32.length * 2)
-  const view = new DataView(buffer)
-
-  for (let i = 0; i < float32.length; i++) {
-    let s = Math.max(
-      -1, Math.min(1, float32[i])
-    );
-
-    view.setInt16(i * 2,
-      s < 0 ?
-        s * 0x8000 :
-        s * 0x7FFF, true);
-  }
-  return buffer
-}
+const samepleRate = 16000
 
 async function start() {
   socket = new WebSocket(`ws://${url}`)
@@ -47,28 +33,26 @@ async function start() {
     transcript.value = e.data
   }
 
-  const stream = await navigator.mediaDevices.getUserMedia({
+  stream = await navigator.mediaDevices.getUserMedia({
     audio: {
       echoCancellation: true,
       noiseSuppression: true,
       autoGainControl: false,
-      sampleRate: 44100
+      sampleRate: samepleRate
     }
   })
 
-  audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 44100 })
-
-  processor = audioCtx.createScriptProcessor(4096, 1, 1)
+  audioCtx = new AudioContext({ sampleRate: samepleRate })
+  await audioCtx.audioWorklet.addModule('/processor.js')
+  // audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: samepleRate })
   source = audioCtx.createMediaStreamSource(stream)
+  processor = new AudioWorkletNode(audioCtx, 'pcm-processor')
 
-  processor.onaudioprocess = e => {
-    const float32 = e.inputBuffer.getChannelData(0)
-    const int16 = convertToInt16(float32)
-    if (socket.readyState === 1) socket.send(int16)
+  processor.port.onmessage = (e: MessageEvent) => {
+    if (socket.readyState === 1) socket.send(e.data)
   }
 
-  source.connect(processor)
-  processor.connect(audioCtx.destination)
+  source.connect(processor).connect(audioCtx.destination)
 }
 
 function end() {
@@ -76,6 +60,7 @@ function end() {
   source?.disconnect()
   audioCtx?.close()
   socket?.close()
+  stream?.getTracks().forEach(track => track.stop())
 }
 
 onBeforeUnmount(() => {
