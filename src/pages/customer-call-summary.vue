@@ -3,7 +3,7 @@
   <v-container fluid class="mb-2">
     <!-- Call Summary -->
 
-    <v-row align="center" justify="space-between" class="mb-4 mr-n7 ml-n3">
+    <v-row align="center" justify="space-between" class="mb-4 mr-n3 ml-n3">
       <v-col cols="11" class="text
       -foreground"><h1>Call Summary</h1></v-col>
         <v-col cols="1" >
