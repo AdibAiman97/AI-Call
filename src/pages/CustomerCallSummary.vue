@@ -1,11 +1,13 @@
 <template>
 
-  <v-container fluid class="mb-2 ms-4">
+  <v-container fluid class="mb-2">
     <!-- Call Summary -->
 
-    <v-row align="center" justify="space-between" class="elevation-2 pa-4 mb-4">
-      <v-col cols="6" class="pa-4 text-foreground"><h1>Call Summary</h1></v-col>
-      <v-btn @click="export"><v-icon> mdi-export </v-icon> Export</v-btn>
+    <v-row align="center" justify="space-between" class="mb-4 mr-n7 ml-n3">
+      <v-col cols="11" class="text-foreground"><h1>Call Summary</h1></v-col>
+        <v-col cols="1" >
+          <v-btn @click="export"><v-icon> mdi-export </v-icon> Export</v-btn>
+      </v-col>
     </v-row>
 
     <!-- Summary Content -->
