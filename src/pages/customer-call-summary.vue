@@ -27,7 +27,7 @@
             text
             color="primary"
             class="text-none px-2"
-            @click="fullTranscript">View full transcript
+            @click="fullTranscript">View full transcript >
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -43,7 +43,7 @@
             text
             color="primary"
             class="text-none px-2"
-            @click="fullTranscript">View full transcript
+            @click="fullTranscript">View full transcript >
           </v-btn>
         </v-card-actions>
       </v-card>

@@ -9,11 +9,14 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AppFooter: typeof import('./components/AppFooter.vue')['default']
+    DeepChat: typeof import('./components/DeepChat.vue')['default']
     Header: typeof import('./components/Header.vue')['default']
-    HeaderComp: typeof import('./components/HeaderComp.vue')['default']
+    HeaderBar: typeof import('./components/HeaderBar.vue')['default']
     HelloWorld: typeof import('./components/HelloWorld.vue')['default']
+    RenderComp: typeof import('./components/RenderComp.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SidePanel: typeof import('./components/SidePanel.vue')['default']
+    UserCard: typeof import('./components/UserCard.vue')['default']
   }
 }
