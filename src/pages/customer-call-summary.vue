@@ -1,21 +1,19 @@
 <template>
-
-  <v-container fluid class="mb-2">
+  <!-- <v-container fluid class="mb-2"> -->
     <!-- Call Summary -->
 
-    <v-row align="center" justify="space-between" class="mb-4 mr-n3 ml-n3">
-      <v-col cols="11" class="text
-      -foreground"><h1>Call Summary</h1></v-col>
-        <v-col cols="1" >
-          <v-btn @click="export"><v-icon> mdi-export </v-icon> Export</v-btn>
-      </v-col>
-    </v-row>
+    <div class="mb-4 d-flex align-center justify-space-between">
+      <!-- <v-col cols="11" class="text -foreground"> -->
+      <h1>Call Summary</h1>
+      <!-- </v-col> -->
+      <!-- <v-col cols="1" > -->
+      <v-btn @click="export"><v-icon> mdi-export </v-icon> Export</v-btn>
+      <!-- </v-col> -->
+    </div>
 
     <!-- Summary Content -->
     <div class="d-flex flex-column">
-      <v-card
-        class="mb-6 flex-grow-1 rounded-lg mr-md-4 w-100 elevation-2"
-      >
+      <v-card class="mb-6 flex-grow-1 rounded-lg mr-md-4 w-100 elevation-2">
         <v-card-title class="text-h6 text-foreground">
           Summarized Context
         </v-card-title>
@@ -23,27 +21,29 @@
           <div class="text-body-1"></div>
         </v-card-text>
         <v-card-actions class="pa-2">
-          <v-btn 
+          <v-btn
             text
             color="primary"
             class="text-none px-2"
-            @click="fullTranscript">View full transcript >
+            @click="fullTranscript"
+            >View full transcript >
           </v-btn>
         </v-card-actions>
       </v-card>
 
       <!-- Suggestions -->
-      <v-card
-        class="mb-6 rounded-lg mr-md-4 w-100 elevation-2"
-      >
-        <v-card-title class="text-h6 text-foreground"> Suggestions </v-card-title>
+      <v-card class="mb-6 rounded-lg mr-md-4 w-100 elevation-2">
+        <v-card-title class="text-h6 text-foreground">
+          Suggestions
+        </v-card-title>
         <v-card-text class="pa-2"> </v-card-text>
         <v-card-actions class="pa-2">
-          <v-btn 
+          <v-btn
             text
             color="primary"
             class="text-none px-2"
-            @click="fullTranscript">View full transcript >
+            @click="fullTranscript"
+            >View full transcript >
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -61,8 +61,7 @@
         Schedule Appointment
       </v-btn>
     </div>
-  </v-container>
+  <!-- </v-container> -->
 </template>
 
-<script setup>
-</script>
+<script setup></script>
