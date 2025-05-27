@@ -15,16 +15,16 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed } from "vue";
+import { useRouter } from "vue-router";
 
 const router = useRouter();
 
 const props = defineProps({
   open: {
     type: Boolean,
-    required: true
-  }
+    required: true,
+  },
 });
 
 const menuItems = [
@@ -41,7 +41,7 @@ const drawerOpen = computed({
   set: (value) => {
     // Emit an event if you want to notify the parent about changes
     // This is optional and depends on your use case
-    emit('update:open', value);
-  }
+    emit("update:open", value);
+  },
 });
 </script>
