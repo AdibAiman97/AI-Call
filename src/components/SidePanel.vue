@@ -1,14 +1,17 @@
 <template>
   <v-navigation-drawer v-model="drawerOpen">
-    <v-list-item title="Contents" class="pa-5"></v-list-item>
-    <v-divider></v-divider>
-    <v-list-item-group class="">
+    <!-- <v-list-item title="Contents" class="pa-5"></v-list-item>
+    <v-divider></v-divider> -->
+    <v-list-item-group class="pa-5 text-center">
       <v-list-item
         v-for="item in menuItems"
         :key="item.id"
         @click="navigate(item.route)"
       >
-        <v-list-item-title>{{ item.text }}</v-list-item-title>
+        <div class="d-flex align-center px-8 py-3 ga-3">
+          <svg-icon type="mdi" class="text-foreground" :path="item.path"></svg-icon>
+          <v-list-item-title>{{ item.text }}</v-list-item-title>
+        </div>
       </v-list-item>
     </v-list-item-group>
   </v-navigation-drawer>
@@ -17,6 +20,11 @@
 <script setup>
 import { computed } from "vue";
 import { useRouter } from "vue-router";
+
+import SvgIcon from "@jamescoyle/vue-icon";
+import { mdiViewDashboard } from "@mdi/js";
+import { mdiCalendarMonth } from '@mdi/js';
+import { mdiFrequentlyAskedQuestions } from '@mdi/js';
 
 const router = useRouter();
 
@@ -28,8 +36,9 @@ const props = defineProps({
 });
 
 const menuItems = [
-  { id: 1, text: "Home", route: "/" },
-  { id: 2, text: "About", route: "/about" },
+  { id: 1, text: "Dashboard", path: mdiViewDashboard, route: "/admin" },
+  { id: 2, text: "Appointment", path: mdiCalendarMonth, route: "/admin/appointment" },
+  { id: 3, text: "FAQ Database", path: mdiFrequentlyAskedQuestions, route: "/admin/faq-database" },
 ];
 
 function navigate(route) {

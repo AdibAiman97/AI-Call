@@ -1,25 +1,24 @@
 <template>
   <div>
-    <h1 class="d-flex justify-space-between text-foreground">
+    <h1 class="d-flex justify-space-between text-foreground align-center">
       Appointment
       <div class="d-flex ga-2">
-        <v-btn class="text-capitalize text-foreground">
-          <ListFilter :size="20" />
+        <v-btn class="text-capitalize text-foreground border border-foreground">
+          <ListFilter :size="20" class="mr-2" />
           Filter
         </v-btn>
-        <v-btn class="bg-primary text-capitalize">
-          <Plus :size="20" />
+        <v-btn class="bg-primary text-background text-capitalize">
+          <Plus :size="20" class="mr-2"/>
           Add Appointment
         </v-btn>
       </div>
     </h1>
-    <p class="text-foreground text-body-2">
+    <p class="text-foreground">
       Manage your upcoming customer meetings
     </p>
     <v-calendar :interval-minutes="30" :interval-height="48" ref="calendar" v-model="value" :events="events"
       :view-mode="type" :weekdays="days">
     </v-calendar>
-
   </div>
 </template>
 
@@ -49,7 +48,7 @@ const weekdays = [
   { title: 'Mon-Fri', value: [1, 2, 3, 4, 5] }
 ];
 
-const colors = ['primary', 'secondary', 'info']
+const colors = ['calendarGreen', 'calendarRed', 'calendarBlue', 'calendarYellow']
 const titles = ['Meeting', 'Holiday', 'Workshop', 'Appointment']
 
 function rand(a, b) {
@@ -154,8 +153,53 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* Specific styles for internal events */
 :deep(.v-calendar-internal-event) {
   margin-top: 0px !important;
   height: 48px !important;
+  border-color: #374151 !important;
+}
+
+/* Outer container border and rounded corners */
+.v-calendar :deep(.v-calendar__container) {
+  border-color: #374151 !important;
+  border-radius: 6px !important; /* Added for rounded corners */
+  overflow: hidden; /* Crucial for rounded corners to work correctly */
+}
+
+/* Grouped border-drawing elements within v-calendar (EXCLUDING v-calendar__container now) */
+.v-calendar :deep(.v-calendar-interval__line),
+.v-calendar :deep(.v-calendar-day__row-content),
+.v-calendar :deep(.v-calendar-day__row-hairline),
+.v-calendar :deep(.v-calendar-day__row-hairline::after), /* Pseudo-element needs background-color too */
+.v-calendar :deep(.v-calendar-day__container), /* This refers to the day content container, not the main calendar container */
+.v-calendar :deep(.v-calendar-day__row-without-label),
+.v-calendar :deep(.v-calendar-day__row-with-label),
+.v-calendar :deep(.v-calendar-weekly__day-grid),
+.v-calendar :deep(.v-calendar-weekly__day),
+.v-calendar :deep(.v-calendar-weekly__head-weekday),
+.v-calendar :deep(.v-calendar-daily__day-name),
+.v-calendar :deep(.v-calendar-daily__intervals-body),
+.v-calendar :deep(.v-calendar-daily__time),
+.v-calendar :deep(.v-calendar-header),
+.v-calendar :deep(.v-event-more),
+.v-calendar :deep(.v-event) {
+  border-color: #374151 !important;
+}
+
+/* Styling buttons in v-calendar-header with direct hex color --- */
+.v-calendar :deep(.v-calendar-header .v-calendar-header__today) {
+  text-transform: capitalize !important; /* text-capitalize */
+  color: #F9FAFB !important; /* Directly set to your foreground hex color */
+  border: 0.5px solid #4B5563 !important; /* Directly set to your foreground hex color */
+  background-color: #1F2937;
+}
+
+/* For specific Vuetify button variants, you might need to override their background */
+.v-calendar :deep(.v-calendar-header .v-btn.v-btn--variant-text) {
+  background-color: transparent !important;
+}
+.v-calendar :deep(.v-calendar-header .v-btn.v-btn--variant-tonal) {
+  background-color: transparent !important;
 }
 </style>

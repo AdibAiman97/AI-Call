@@ -12,7 +12,7 @@
               size="large" 
               color="primary"
               class="mt-12 text-primary gradient-wave-btn"
-              to="/oncall-page"
+              to="/on-call"
               rounded
               @click="callStore.startCall()"
             >

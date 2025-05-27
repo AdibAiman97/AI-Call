@@ -5,12 +5,12 @@
  */
 
 // Styles
-import '@mdi/font/css/materialdesignicons.css'
-import 'vuetify/styles'
-import { VCalendar } from 'vuetify/labs/VCalendar'
+import "@mdi/font/css/materialdesignicons.css";
+import "vuetify/styles";
+import { VCalendar } from "vuetify/labs/VCalendar";
 
 // Composables
-import { createVuetify } from 'vuetify'
+import { createVuetify } from "vuetify";
 
 // https://vuetifyjs.com/en/introduction/why-vuetify/#feature-guides
 export default createVuetify({
@@ -18,23 +18,29 @@ export default createVuetify({
     VCalendar,
   },
   theme: {
-    defaultTheme: 'dark',
+    defaultTheme: "dark",
     themes: {
       dark: {
-          colors: {
-            background: '#111827',
-            foreground: '#F9FAFB',
-            surface: '#1F2937',
-            primary: '#2EC4B6',
-            secondary: '#2D3748',
-            accent: '#5E5E5E',
-            info: '#023E7D',
-            success: '#064E3B',
-            warning: '#FFA726',
-            error: '#7F1D1D',
-            icon: '#1E40AF',
-          },
+        colors: {
+          background: "#111827",
+          foreground: "#F9FAFB",
+          surface: "#1F2937",
+          primary: "#2EC4B6",
+          secondary: "#2D3748",
+          accent: "#5E5E5E",
+          info: "#023E7D",
+          success: "#064E3B",
+          warning: "#FFA726",
+          error: "#7F1D1D",
+          icon: "#1E40AF",
+
+          // Custom colors
+          calendarBlue: "#2563EB",
+          calendarGreen: "#056F52",
+          calendarRed: "#BB2323",
+          calendarYellow: "#F59E0B",
+        },
       },
     },
   },
-})
+});

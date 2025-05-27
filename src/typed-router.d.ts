@@ -19,11 +19,12 @@ declare module 'vue-router/auto-routes' {
    */
   export interface RouteNamedMap {
     '/': RouteRecordInfo<'/', '/', Record<never, never>, Record<never, never>>,
-    '/calendar/': RouteRecordInfo<'/calendar/', '/calendar', Record<never, never>, Record<never, never>>,
-    '/customer-call-summary': RouteRecordInfo<'/customer-call-summary', '/customer-call-summary', Record<never, never>, Record<never, never>>,
-    '/database': RouteRecordInfo<'/database', '/database', Record<never, never>, Record<never, never>>,
-    '/oncall-page': RouteRecordInfo<'/oncall-page', '/oncall-page', Record<never, never>, Record<never, never>>,
+    '/admin/': RouteRecordInfo<'/admin/', '/admin', Record<never, never>, Record<never, never>>,
+    '/admin/appointment/': RouteRecordInfo<'/admin/appointment/', '/admin/appointment', Record<never, never>, Record<never, never>>,
+    '/admin/call-summary/': RouteRecordInfo<'/admin/call-summary/', '/admin/call-summary', Record<never, never>, Record<never, never>>,
+    '/admin/faq-database/': RouteRecordInfo<'/admin/faq-database/', '/admin/faq-database', Record<never, never>, Record<never, never>>,
+    '/call-summary/': RouteRecordInfo<'/call-summary/', '/call-summary', Record<never, never>, Record<never, never>>,
+    '/on-call/': RouteRecordInfo<'/on-call/', '/on-call', Record<never, never>, Record<never, never>>,
     '/stt': RouteRecordInfo<'/stt', '/stt', Record<never, never>, Record<never, never>>,
-    '/UserCallSummary': RouteRecordInfo<'/UserCallSummary', '/UserCallSummary', Record<never, never>, Record<never, never>>,
   }
 }

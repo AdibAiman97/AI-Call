@@ -9,6 +9,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AppFooter: typeof import('./components/AppFooter.vue')['default']
+    DashboardCard: typeof import('./components/DashboardCard.vue')['default']
     DeepChat: typeof import('./components/DeepChat.vue')['default']
     Header: typeof import('./components/Header.vue')['default']
     HeaderBar: typeof import('./components/HeaderBar.vue')['default']

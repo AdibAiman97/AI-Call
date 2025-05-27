@@ -24,7 +24,7 @@
         </v-icon>
       </v-btn>
 
-      <v-btn @click="callStore.endCall()" to="/" class="bg-error" size="70" rounded="circle">
+      <v-btn @click="callStore.endCall()" to="/call-summary" class="bg-error" size="70" rounded="circle">
         <v-icon>
           <phone color="white" />
         </v-icon>
