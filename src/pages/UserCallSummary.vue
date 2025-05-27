@@ -10,7 +10,7 @@
       </div>
       
       
-      <div class="d-flex bg-blue">
+      <div class="d-flex">
         <v-btn @click=""><v-icon> mdi-export </v-icon> Export</v-btn>
       </div>
     </div>
