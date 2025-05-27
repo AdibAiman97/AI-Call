@@ -51,15 +51,14 @@
       Back to Home Page
     </v-btn>
 
-    <v-btn
+    <!-- <v-btn
       color="primary"
       large
       @click="scheduleAppointment"
       class="px-6 text-capitalize"
     >
-      <!-- <v-icon left>mdi-calendar-plus</v-icon> -->
       Schedule Appointment
-    </v-btn>
+    </v-btn> -->
   </div>
   <!-- </v-container> -->
 </template>

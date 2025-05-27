@@ -19,12 +19,11 @@
   <!-- Main Card Content -->
   <div class="">
     <v-card
-      class="pa-6"
+      class="pa-6 rounded-lg"
       elevation="2"
       width="100%"
       variant="outlined"
-      color="#1F2937"
-      border-color="grey-lighten-2"
+      color="secondary"
     >
       <!-- Context Section -->
       <p class="text-h6 text-foreground">Context:</p>

@@ -55,8 +55,8 @@
 
         <!-- Action Buttons -->
         <div class="d-flex ga-5 mb-6">
-          <v-btn outlined large @click="" class="px-6 text-capitalize">
-            Back to Home Page
+          <v-btn outlined large @click="" to="/admin" class="px-6 text-capitalize">
+            Back to Dashboard
           </v-btn>
         </div>
       </div>

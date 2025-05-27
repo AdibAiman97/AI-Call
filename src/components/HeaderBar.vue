@@ -104,4 +104,8 @@ onUnmounted(() => {
   padding-inline-start: 0 !important;
   padding-inline-end: 0 !important;
 }
+
+:deep(.v-toolbar__append) {
+  margin-right: 0 !important;
+}
 </style>

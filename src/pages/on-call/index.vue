@@ -2,8 +2,8 @@
   <div class="d-flex flex-column align-center justify-center fill-height  
   ga-10">
     <div class="d-flex flex-column align-center justify-center">
-    <v-avatar size="100" class="bg-icon">
-      <span class="text-h4 text-white">AI</span>
+    <v-avatar size="100" class="bg-primary">
+      <span class="text-h4 text-background font-weight-bold">AI</span>
       </v-avatar>
       <h2 class="d-flex align-center justify-center pt-2">AI Agent</h2>
     </div>
