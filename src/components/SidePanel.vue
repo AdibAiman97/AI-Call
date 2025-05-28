@@ -36,9 +36,8 @@ const props = defineProps({
 });
 
 const menuItems = [
-  { id: 1, text: "Dashboard", path: mdiViewDashboard, route: "/admin" },
-  { id: 2, text: "Appointment", path: mdiCalendarMonth, route: "/admin/appointment" },
-  { id: 3, text: "FAQ Database", path: mdiFrequentlyAskedQuestions, route: "/admin/faq-database" },
+  { id: 1, text: "Home", path: mdiViewDashboard, route: "/admin" },
+  { id: 2, text: "FAQ Database", path: mdiFrequentlyAskedQuestions, route: "/admin/faq-database" },
 ];
 
 function navigate(route) {
