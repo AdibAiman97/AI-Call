@@ -64,7 +64,7 @@
         </v-card>
 
         <!-- Action Buttons -->
-        <div class="d-flex ga-5 mb-6">
+        <!-- <div class="d-flex ga-5 mb-6">
           <v-btn
             outlined
             large
@@ -74,7 +74,7 @@
           >
             Back to Dashboard
           </v-btn>
-        </div>
+        </div> -->
       </div>
 
       <!-- Right Column -->
