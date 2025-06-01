@@ -22,13 +22,24 @@
         </div>
       </div>
     </template>
+
+    <template v-if="!callStore.isInCall" v-slot:append>
+      <v-btn
+        @click="toggleUserRole"
+        class="text-capitalize rounded-lg border-4 border-primary text-primary"
+        height="30"
+        variant="outlined"
+      >
+        {{ currentUserRole === "Admin" ? "Customer" : "Admin" }}
+      </v-btn>
+    </template>
   </v-app-bar>
 </template>
 
 <script setup>
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useCallStore } from "@/stores/call.ts";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 
 const props = defineProps({
   toggleDrawer: {
@@ -39,6 +50,8 @@ const props = defineProps({
 
 const route = useRoute();
 
+const router = useRouter();
+
 const callStore = useCallStore();
 
 const elapsedSeconds = ref(0);
@@ -48,6 +61,9 @@ let timer = null;
 const isAdminRoute = computed(() => {
   return route.path.startsWith("/admin");
 });
+
+// Initialize currentUserRole based on isAdminRoute's initial value
+const currentUserRole = ref(isAdminRoute.value ? 'Admin' : 'Customer');
 
 const formattedTime = computed(() => {
   //   const hours = Math.floor(elapsedSeconds.value / 3600);
@@ -63,6 +79,18 @@ const formattedTime = computed(() => {
   const sec = String(elapsedSeconds.value % 60).padStart(2, "0");
   return `${min}:${sec}`;
 });
+
+// Function to toggle the user role
+function toggleUserRole() {
+  currentUserRole.value = currentUserRole.value === 'Admin' ? 'Customer' : 'Admin';
+  console.log('User role switched to:', currentUserRole.value);
+
+  if (currentUserRole.value === 'Admin') {
+    router.push('/admin');
+  } else {
+    router.push('/');
+  }
+}
 
 // Watch when the call starts/stops
 watch(

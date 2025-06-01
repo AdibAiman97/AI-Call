@@ -1,7 +1,5 @@
 <template>
   <v-navigation-drawer v-model="drawerOpen">
-    <!-- <v-list-item title="Contents" class="pa-5"></v-list-item>
-    <v-divider></v-divider> -->
     <v-list-item-group class="pa-5 text-center">
       <v-list-item
         v-for="item in menuItems"
@@ -26,6 +24,8 @@ import { mdiViewDashboard } from "@mdi/js";
 import { mdiCalendarMonth } from '@mdi/js';
 import { mdiFrequentlyAskedQuestions } from '@mdi/js';
 
+const emit = defineEmits(['update:open']);
+
 const router = useRouter();
 
 const props = defineProps({
@@ -42,6 +42,7 @@ const menuItems = [
 
 function navigate(route) {
   router.push(route);
+  drawerOpen.value = false;
 }
 
 const drawerOpen = computed({

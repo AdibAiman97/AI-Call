@@ -1,12 +1,12 @@
 <template>
-  <div class="d-flex justify-space-between align-center">
+  <div class="d-flex justify-space-between align-center mb-2">
     <h1>Call Summary</h1>
-    <v-btn class="text-capitalize text-foreground border border-foreground">
+    <v-btn class="text-capitalize text-foreground">
       <v-icon class="mr-2"> mdi-export </v-icon> Export
     </v-btn>
   </div>
 
-  <p class="text-foreground pb-2">Customer Name • 12 min • Today, 2:30 PM</p>
+  <p class="text-foreground pb-2 mb-4">Customer Name • 12 min • Today, 2:30 PM</p>
 
   <!-- Summary Content -->
   <div class="d-flex flex-column">
