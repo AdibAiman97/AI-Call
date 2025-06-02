@@ -1,28 +1,36 @@
 <template>
-  <div fluid class="mb-2 h-screen">
+  <!-- Admin Call Summary -->
+  <div class="mb-2">
     <div class="d-flex justify-space-between align-center mb-2">
       <h1>Call Summary</h1>
       <v-btn class="text-capitalize text-foreground">
         <v-icon class="mr-2"> mdi-export </v-icon> Export
       </v-btn>
     </div>
-    <p class="text-foreground pb-2 mb-4">Customer Name • 12 min • Today, 2:30 PM</p>
+    <p class="text-foreground pb-2 mb-4">
+      Customer Name • 12 min • Today, 2:30 PM
+    </p>
 
     <!-- Summary Content -->
     <div class="d-flex flex-column flex-md-row">
       <!-- Left Column -->
-      <div class="flex-grow-1 mr-md-4">
+      <v-col cols="9" class="mr-md-4 pa-0">
         <!-- Summarized Context -->
         <v-card class="mb-6 rounded-lg elevation-2">
           <v-card-title class="text-h6 text-foreground">
             Summarized Context
           </v-card-title>
-          <v-card-text class="pa-2">
-            <div class="text-body-1"></div>
+          <v-card-text
+            class="d-flex flex-column ga-2 text-body-1 text-secForeground"
+          >
+            <div v-for="item in summaryList" class="d-flex ga-2">
+              <p>•</p>
+              <p>{{ item }}</p>
+            </div>
           </v-card-text>
           <v-card-actions class="pa-2">
-            <v-btn text color="primary" class="text-none px-2" @click=""
-              >View full transcript >
+            <v-btn text color="primary" class="text-capitalize px-2" @click=""
+              >View Full Transcript >
             </v-btn>
           </v-card-actions>
         </v-card>
@@ -55,32 +63,24 @@
           <v-card-title class="text-h6 text-foreground"
             >Suggestions</v-card-title
           >
-          <v-card-text class="pa-2">
-            <div class="text-body-1"></div>
+          <v-card-text
+            class="d-flex flex-column ga-2 text-body-1 text-secForeground"
+          >
+            <div v-for="item in agentNextSteps" class="d-flex ga-2">
+              <p>•</p>
+              <p>{{ item }}</p>
+            </div>
           </v-card-text>
           <v-card-actions class="pa-2">
-            <v-btn text color="primary" class="text-none px-2" @click=""
+            <v-btn text color="primary" class="text-capitalize px-2" @click=""
               >View full transcript >
             </v-btn>
           </v-card-actions>
         </v-card>
-
-        <!-- Action Buttons -->
-        <!-- <div class="d-flex ga-5 mb-6">
-          <v-btn
-            outlined
-            large
-            @click=""
-            to="/admin"
-            class="px-6 text-capitalize"
-          >
-            Back to Dashboard
-          </v-btn>
-        </div> -->
-      </div>
+      </v-col>
 
       <!-- Right Column -->
-      <div style="width: 300px">
+      <v-col class="pa-0">
         <!-- Customer Info -->
         <v-card class="mb-6 rounded-lg w-100 elevation-2">
           <v-card-title class="text-h6">Customer</v-card-title>
@@ -188,10 +188,13 @@
             </div>
           </v-card-text>
         </v-card>
-      </div>
+      </v-col>
     </div>
   </div>
 
+  <v-divider class="my-6"></v-divider>
+
+  <!-- Calendar -->
   <div>
     <h1 class="d-flex justify-space-between text-foreground align-center mb-2">
       Appointment
@@ -235,6 +238,20 @@ const events = ref([
   //   end: new Date(1747969200000 + 3600000),
   //   color: 'primary'
   // }
+]);
+
+const summaryList = ref([
+  "The discussion centered on a customer's concerns about property taxes and maintenance costs for a potential investment property. The agent offered insights into typical expenses in the area and provided resources for estimating ongoing costs.",
+  "The customer was a first-time homebuyer seeking guidance on the entire process, from identifying suitable properties to making an offer and closing the deal. The agent patiently walked them through each step, addressing their questions about market trends and legal procedures.",
+  "The customer and agent discussed a new development project, with the customer inquiring about floor plans, amenities, and the estimated completion date. The agent provided brochures and highlighted the unique selling points of the development.",
+  "A customer had seen a property that was slightly outside their budget but was very keen on it. The agent discussed negotiation strategies and explored potential concessions or alternative financing solutions to try and make the property more attainable.",
+]);
+
+const agentNextSteps = ref([
+  "Curate and send relevant listings: Based on the customer's expressed needs (neighborhood, budget, features), send a targeted list of available properties or new development information.",
+  "Initiate mortgage broker connection: If the customer needs financing assistance, proactively connect them with a trusted mortgage broker (with the customer's consent).",
+  "Schedule property viewings: Propose and arrange property visits or virtual tours for the listings the customer shows interest in.",
+  "Prepare detailed property information: For scheduled viewings, have comprehensive information packets ready (e.g., floor plans, property history, recent comparable sales, tax info).",
 ]);
 
 console.log(events.value.start);
