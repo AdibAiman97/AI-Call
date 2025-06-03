@@ -7,7 +7,11 @@
         @click="navigate(item.route)"
       >
         <div class="d-flex align-center px-8 py-3 ga-3">
-          <svg-icon type="mdi" class="text-foreground" :path="item.path"></svg-icon>
+          <svg-icon
+            type="mdi"
+            class="text-foreground"
+            :path="item.path"
+          ></svg-icon>
           <v-list-item-title>{{ item.text }}</v-list-item-title>
         </div>
       </v-list-item>
@@ -21,10 +25,10 @@ import { useRouter } from "vue-router";
 
 import SvgIcon from "@jamescoyle/vue-icon";
 import { mdiViewDashboard } from "@mdi/js";
-import { mdiCalendarMonth } from '@mdi/js';
-import { mdiFrequentlyAskedQuestions } from '@mdi/js';
+import { mdiCalendarMonth } from "@mdi/js";
+import { mdiFrequentlyAskedQuestions } from "@mdi/js";
 
-const emit = defineEmits(['update:open']);
+const emit = defineEmits(["update:open"]);
 
 const router = useRouter();
 
@@ -37,7 +41,18 @@ const props = defineProps({
 
 const menuItems = [
   { id: 1, text: "Home", path: mdiViewDashboard, route: "/admin" },
-  { id: 2, text: "FAQ Database", path: mdiFrequentlyAskedQuestions, route: "/admin/faq-database" },
+  {
+    id: 2,
+    text: "Appointment",
+    path: mdiCalendarMonth,
+    route: "/admin/appointment",
+  },
+  {
+    id: 2,
+    text: "FAQ Database",
+    path: mdiFrequentlyAskedQuestions,
+    route: "/admin/faq-database",
+  },
 ];
 
 function navigate(route) {
