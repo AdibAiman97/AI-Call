@@ -1,26 +1,36 @@
 <template>
-  <div fluid class="mb-2 h-screen">
-    <div class="d-flex justify-space-between align-center">
+  <!-- Admin Call Summary -->
+  <div class="mb-2">
+    <div class="d-flex justify-space-between align-center mb-2">
       <h1>Call Summary</h1>
-      <v-btn> <v-icon> mdi-export </v-icon> Export </v-btn>
+      <v-btn class="text-capitalize text-foreground">
+        <v-icon class="mr-2"> mdi-export </v-icon> Export
+      </v-btn>
     </div>
-    <p class="text-foreground pb-2">Customer Name • 12 min • Today, 2:30 PM</p>
+    <p class="text-foreground pb-2 mb-4">
+      Customer Name • 12 min • Today, 2:30 PM
+    </p>
 
     <!-- Summary Content -->
     <div class="d-flex flex-column flex-md-row">
       <!-- Left Column -->
-      <div class="flex-grow-1 mr-md-4">
+      <v-col cols="9" class="mr-md-4 pa-0">
         <!-- Summarized Context -->
         <v-card class="mb-6 rounded-lg elevation-2">
           <v-card-title class="text-h6 text-foreground">
             Summarized Context
           </v-card-title>
-          <v-card-text class="pa-2">
-            <div class="text-body-1"></div>
+          <v-card-text
+            class="d-flex flex-column ga-2 text-body-1 text-secForeground"
+          >
+            <div v-for="item in summaryList" class="d-flex ga-2">
+              <p>•</p>
+              <p>{{ item }}</p>
+            </div>
           </v-card-text>
           <v-card-actions class="pa-2">
-            <v-btn text color="primary" class="text-none px-2" @click=""
-              >View full transcript >
+            <v-btn text color="primary" class="text-capitalize px-2" @click=""
+              >View Full Transcript >
             </v-btn>
           </v-card-actions>
         </v-card>
@@ -53,32 +63,24 @@
           <v-card-title class="text-h6 text-foreground"
             >Suggestions</v-card-title
           >
-          <v-card-text class="pa-2">
-            <div class="text-body-1"></div>
+          <v-card-text
+            class="d-flex flex-column ga-2 text-body-1 text-secForeground"
+          >
+            <div v-for="item in agentNextSteps" class="d-flex ga-2">
+              <p>•</p>
+              <p>{{ item }}</p>
+            </div>
           </v-card-text>
           <v-card-actions class="pa-2">
-            <v-btn text color="primary" class="text-none px-2" @click=""
+            <v-btn text color="primary" class="text-capitalize px-2" @click=""
               >View full transcript >
             </v-btn>
           </v-card-actions>
         </v-card>
-
-        <!-- Action Buttons -->
-        <div class="d-flex ga-5 mb-6">
-          <v-btn
-            outlined
-            large
-            @click=""
-            to="/admin"
-            class="px-6 text-capitalize"
-          >
-            Back to Dashboard
-          </v-btn>
-        </div>
-      </div>
+      </v-col>
 
       <!-- Right Column -->
-      <div style="width: 300px">
+      <v-col class="pa-0">
         <!-- Customer Info -->
         <v-card class="mb-6 rounded-lg w-100 elevation-2">
           <v-card-title class="text-h6">Customer</v-card-title>
@@ -186,15 +188,18 @@
             </div>
           </v-card-text>
         </v-card>
-      </div>
+      </v-col>
     </div>
   </div>
 
+  <v-divider class="my-6"></v-divider>
+
+  <!-- Calendar -->
   <div>
-    <h1 class="d-flex justify-space-between text-foreground align-center">
+    <h1 class="d-flex justify-space-between text-foreground align-center mb-2">
       Appointment
       <div class="d-flex ga-2">
-        <v-btn class="text-capitalize text-foreground border border-foreground">
+        <v-btn class="text-capitalize text-foreground">
           <ListFilter :size="20" class="mr-2" />
           Filter
         </v-btn>
@@ -204,7 +209,7 @@
         </v-btn>
       </div>
     </h1>
-    <p class="text-foreground">Manage your upcoming customer meetings</p>
+    <p class="text-foreground mb-4">Manage your upcoming customer meetings</p>
     <v-calendar
       :interval-minutes="30"
       :interval-height="48"
@@ -219,13 +224,13 @@
 </template>
 
 <script setup>
-import { useDate } from 'vuetify'
-import { Plus, ListFilter } from 'lucide-vue-next';
+import { useDate } from "vuetify";
+import { Plus, ListFilter } from "lucide-vue-next";
 
 // Values
-const type = ref('week');
+const type = ref("week");
 const days = ref([0, 1, 2, 3, 4, 5, 6]);
-const value = ref(new Date())
+const value = ref(new Date());
 const events = ref([
   // {
   //   title: 'Time',
@@ -233,119 +238,144 @@ const events = ref([
   //   end: new Date(1747969200000 + 3600000),
   //   color: 'primary'
   // }
-])
+]);
 
-console.log(events.value.start)
+const summaryList = ref([
+  "The discussion centered on a customer's concerns about property taxes and maintenance costs for a potential investment property. The agent offered insights into typical expenses in the area and provided resources for estimating ongoing costs.",
+  "The customer was a first-time homebuyer seeking guidance on the entire process, from identifying suitable properties to making an offer and closing the deal. The agent patiently walked them through each step, addressing their questions about market trends and legal procedures.",
+  "The customer and agent discussed a new development project, with the customer inquiring about floor plans, amenities, and the estimated completion date. The agent provided brochures and highlighted the unique selling points of the development.",
+  "A customer had seen a property that was slightly outside their budget but was very keen on it. The agent discussed negotiation strategies and explored potential concessions or alternative financing solutions to try and make the property more attainable.",
+]);
+
+const agentNextSteps = ref([
+  "Curate and send relevant listings: Based on the customer's expressed needs (neighborhood, budget, features), send a targeted list of available properties or new development information.",
+  "Initiate mortgage broker connection: If the customer needs financing assistance, proactively connect them with a trusted mortgage broker (with the customer's consent).",
+  "Schedule property viewings: Propose and arrange property visits or virtual tours for the listings the customer shows interest in.",
+  "Prepare detailed property information: For scheduled viewings, have comprehensive information packets ready (e.g., floor plans, property history, recent comparable sales, tax info).",
+]);
+
+console.log(events.value.start);
 
 // Options
-const types = ['week', 'day'];
+const types = ["week", "day"];
 const weekdays = [
-  { title: 'Mon-Sun', value: [1, 2, 3, 4, 5, 6, 0] },
-  { title: 'Mon-Fri', value: [1, 2, 3, 4, 5] }
+  { title: "Mon-Sun", value: [1, 2, 3, 4, 5, 6, 0] },
+  { title: "Mon-Fri", value: [1, 2, 3, 4, 5] },
 ];
 
-const colors = ['calendarGreen', 'calendarRed', 'calendarBlue', 'calendarYellow']
-const titles = ['Meeting', 'Holiday', 'Workshop', 'Appointment']
+const colors = [
+  "calendarGreen",
+  "calendarRed",
+  "calendarBlue",
+  "calendarYellow",
+];
+const titles = ["Meeting", "Holiday", "Workshop", "Appointment"];
 
 function rand(a, b) {
-  return Math.floor((b - a + 1) * Math.random()) + a
+  return Math.floor((b - a + 1) * Math.random()) + a;
 }
 
 // Random Duration
 function randomDuration() {
-  const duration = ['60', '120', '480']; // in minutes
+  const duration = ["60", "120", "480"]; // in minutes
   const ms = 60 * 1000; // min to ms
   const randDur = rand(0, duration.length - 1);
   const eventDuration = parseInt(duration[randDur]) * ms;
 
-  return eventDuration
+  return eventDuration;
 }
 
-// Random Day 9am - 7pm 
+// Random Day 9am - 7pm
 function randomDay(min, max) {
-  const randDay = rand(min, max)
-  const startDay = new Date(randDay)
-  startDay.setHours(9, 0, 0, 0)
-  const endDay = new Date(randDay)
-  endDay.setHours(19, 0, 0, 0)
+  const randDay = rand(min, max);
+  const startDay = new Date(randDay);
+  startDay.setHours(9, 0, 0, 0);
+  const endDay = new Date(randDay);
+  endDay.setHours(19, 0, 0, 0);
 
-  return { startDay, endDay }
+  return { startDay, endDay };
 }
 
 function randomEvent(startDay, endDay, eventDuration) {
-  const randStart = rand(startDay.getTime(), endDay.getTime() - eventDuration)
-  const start = new Date(randStart - (randStart % 3600000))
-  const end = new Date(start.getTime() + eventDuration)
+  const randStart = rand(startDay.getTime(), endDay.getTime() - eventDuration);
+  const start = new Date(randStart - (randStart % 3600000));
+  const end = new Date(start.getTime() + eventDuration);
 
-  return { start, end }
+  return { start, end };
 }
 
 function checkCalendar(result, max, min, eventDuration) {
-  const { startDay, endDay } = randomDay(min, max)
-  const { start, end } = randomEvent(startDay, endDay, eventDuration)
+  const { startDay, endDay } = randomDay(min, max);
+  const { start, end } = randomEvent(startDay, endDay, eventDuration);
 
-  const hasOverlap = result.some(event => start < event.end && end > event.start)
+  const hasOverlap = result.some(
+    (event) => start < event.end && end > event.start
+  );
 
   if (!hasOverlap) {
-    return { start, end, status: false }
+    return { start, end, status: false };
   } else {
-    return { status: true }
+    return { status: true };
   }
 }
 
 function getEvents({ startWeek, endWeek }) {
-  const result = []
+  const result = [];
   // SoW & EoW
-  const min = startWeek.getTime()
-  const max = endWeek.getTime()
-  const eventCount = 20
+  const min = startWeek.getTime();
+  const max = endWeek.getTime();
+  const eventCount = 20;
   for (let i = 0; i < eventCount; i++) {
-
-    const eventDuration = randomDuration()
+    const eventDuration = randomDuration();
     // const { startDay, endDay } = randomDay(min, max)
     // const { start, end } = randomEvent(startDay, endDay, eventDuration)
-    const isBooked = checkCalendar(result, max, min, eventDuration)
+    const isBooked = checkCalendar(result, max, min, eventDuration);
 
     if (isBooked.status === false) {
-
-      const { start, end } = isBooked
+      const { start, end } = isBooked;
       result.push({
         title: titles[rand(0, titles.length - 1)],
         start,
         end,
         color: colors[rand(0, colors.length - 1)],
-      })
+      });
     }
   }
 
-  events.value = result
-  console.clear()
-  console.log(result)
+  events.value = result;
+  console.clear();
+  console.log(result);
   result.map((each) => {
-    console.log('start', each.start.toLocaleString([], {
-      weekday: 'short',  // e.g., Mon, Tue
-      hour: '2-digit',
-      minute: '2-digit'
-    }))
+    console.log(
+      "start",
+      each.start.toLocaleString([], {
+        weekday: "short", // e.g., Mon, Tue
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    );
 
     // console.log('start',each.start.getTime())
 
-    console.log('end', each.end.toLocaleString([], {
-      weekday: 'short',
-      hour: '2-digit',
-      minute: '2-digit'
-    }))
-  })
+    console.log(
+      "end",
+      each.end.toLocaleString([], {
+        weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    );
+  });
 }
 
 onMounted(() => {
-  const adapter = useDate()
+  const adapter = useDate();
   const today = new Date();
-  const startWeek = adapter.startOfWeek(today)
-  const endWeek = adapter.endOfWeek(today)
+  const startWeek = adapter.startOfWeek(today);
+  const endWeek = adapter.endOfWeek(today);
 
-  getEvents({ startWeek, endWeek })
-})
+  getEvents({ startWeek, endWeek });
+});
 </script>
 
 <style scoped>
@@ -386,9 +416,10 @@ onMounted(() => {
 /* Styling buttons in v-calendar-header with direct hex color --- */
 .v-calendar :deep(.v-calendar-header .v-calendar-header__today) {
   text-transform: capitalize !important; /* text-capitalize */
-  color: #F9FAFB !important; /* Directly set to your foreground hex color */
-  border: 0.5px solid #4B5563 !important; /* Directly set to your foreground hex color */
-  background-color: #1F2937;
+  color: #f9fafb !important; /* Directly set to your foreground hex color */
+  /* border: 0.5px solid #4b5563 !important; */
+  border: none !important;
+  background-color: #1f2937;
 }
 
 /* For specific Vuetify button variants, you might need to override their background */

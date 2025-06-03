@@ -1,7 +1,7 @@
 <template>
   <!-- Header Section -->
 
-  <div class="d-flex justify-space-between align-center">
+  <div class="d-flex justify-space-between align-center mb-2">
     <h1>Import Note to Database</h1>
     <v-btn>
       <svg-icon
@@ -14,7 +14,7 @@
     </v-btn>
   </div>
 
-  <p class="text-foreground pb-2">Add new information to the database</p>
+  <p class="text-foreground pb-2 mb-4">Add new information to the database</p>
 
   <!-- Main Card Content -->
   <div class="">

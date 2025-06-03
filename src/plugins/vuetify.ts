@@ -24,6 +24,7 @@ export default createVuetify({
         colors: {
           background: "#111827",
           foreground: "#F9FAFB",
+          secForeground: "#D1D5DB",
           surface: "#1F2937",
           primary: "#2EC4B6",
           secondary: "#2D3748",
