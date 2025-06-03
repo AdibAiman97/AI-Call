@@ -60,21 +60,6 @@ const isAdminRoute = computed(() => {
 // Initialize currentUserRole based on isAdminRoute's initial value
 const currentUserRole = ref(isAdminRoute.value ? 'Admin' : 'Customer');
 
-const formattedTime = computed(() => {
-  //   const hours = Math.floor(elapsedSeconds.value / 3600);
-  //   const minutes = Math.floor((elapsedSeconds.value % 3600) / 60);
-  //   const seconds = elapsedSeconds.value % 60;
-  //
-  //   const hh = hours > 0 ? String(Math.floor(elapsedSeconds.value / 3600)).padStart(2, "0") + ":" : "";
-  //   const mm = String(Math.floor(elapsedSeconds.value / 60)).padStart(2, "0");
-  //   const ss = String(elapsedSeconds.value % 60).padStart(2, "0");
-  //   return `${hh}${mm}:${ss}`;
-
-  const min = String(Math.floor(elapsedSeconds.value / 60)).padStart(2, "0");
-  const sec = String(elapsedSeconds.value % 60).padStart(2, "0");
-  return `${min}:${sec}`;
-});
-
 // Function to toggle the user role
 function toggleUserRole() {
   currentUserRole.value = currentUserRole.value === 'Admin' ? 'Customer' : 'Admin';
@@ -86,28 +71,6 @@ function toggleUserRole() {
     router.push('/');
   }
 }
-
-// Watch when the call starts/stops
-watch(
-  () => callStore.isInCall,
-  (inCall) => {
-    if (inCall) {
-      elapsedSeconds.value = 0;
-      timer = setInterval(() => {
-        elapsedSeconds.value++;
-      }, 1000);
-    } else {
-      if (timer) clearInterval(timer);
-      timer = null;
-      elapsedSeconds.value = 0;
-    }
-  },
-  { immediate: true }
-);
-
-onUnmounted(() => {
-  if (timer) clearInterval(timer);
-});
 </script>
 
 <style scoped>
