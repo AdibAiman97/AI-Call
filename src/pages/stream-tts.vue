@@ -169,7 +169,7 @@ const connectWebSocket = () => {
   if (ws.value && ws.value.readyState === WebSocket.OPEN) {
     return;
   }
-  const wsUrl = import.meta.env.VITE_WEBSOCKET_URL || 'ws://localhost:8000/ws/llm-tts'; // Ensure correct WS endpoint
+  const wsUrl = import.meta.env.VITE_WEBSOCKET_URL || 'ws://localhost:8000/tts'; // Ensure correct WS endpoint
   ws.value = new WebSocket(wsUrl);
 
   ws.value.onopen = () => {
