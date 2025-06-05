@@ -1,0 +1,13 @@
+    # First, make sure you have the 'requests' library installed:
+    # pip install requests
+    # Then, to run this simulated backend, save this code as main.py.
+    # Run python main.py in your terminal.
+    # The uvicorn server will start on  http://0.0.0.0:8000 to run FASTAPI.
+    # Use the index.html to test frontend.
+    # AIzaSyBSw37ByEJ72AS-mpPrzMBNMq4zBOuh8I4 Gemini Api key
+
+   Additional pip install:
+   1)Vertexai
+   2)FASTAPI
+   3)uvicorn
+   4)numpy
