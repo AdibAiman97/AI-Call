@@ -1,3 +1,7 @@
 fastapi
 uvicorn
 google-cloud-speech
+google-cloud-texttospeech
+python-multipart
+websockets
+httpx
