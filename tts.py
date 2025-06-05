@@ -175,7 +175,7 @@ async def websocket_llm_text_to_speech(websocket: WebSocket):
         except RuntimeError:
             pass # WebSocket might already be closed
 
-@router.get("/file")
-async def serve_index():
-    from fastapi.responses import FileResponse
-    return FileResponse("frontend/dist/index.html")
+# @router.get("/file")
+# async def serve_index():
+#     from fastapi.responses import FileResponse
+#     return FileResponse("frontend/dist/index.html")
