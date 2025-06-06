@@ -155,7 +155,11 @@ class VertexRAGSystem:
     
     # LLM FUNCTIONS
     
-    async def generate_response(self, prompt: str, context: Optional[str] = None) -> str:
+    async def generate_response(
+        self, 
+        prompt: str,
+        context: Optional[str] = None
+         ) -> str:
         """Generate response using LLM with optional context"""
         if not self.llm_model:
             raise ValueError("LLM model not initialized")
@@ -188,6 +192,38 @@ class VertexRAGSystem:
         except Exception as e:
             print(f"❌ LLM generation failed: {e}")
             return f"Error generating response: {str(e)}"
+
+    async def generate_response_stream(self, prompt: str, context: Optional[str] = None):
+        if not self.llm_model:
+            raise ValueError("LLM model not initialized")
+
+        if context:
+            full_prompt = f"""Context information:
+            {context}
+
+            Question: {prompt}
+
+            Please answer the question based on the context provided above. If the context doesn't contain relevant information, please say so."""
+        else:
+            full_prompt = prompt
+
+        try:
+            # Stream content from the LLM
+            response = self.llm_model.generate_content(
+                    full_prompt,
+                    generation_config={
+                        "temperature": self.config.temperature,
+                        "max_output_tokens": self.config.max_output_tokens
+                    },
+                    stream=True
+                )
+                
+            for chunk in response:
+                if chunk.candidates and chunk.candidates[0].content:
+                    text = chunk.candidates[0].content.parts[0].text
+                    yield text
+        except Exception as e:
+            yield f"\n[Error generating response: {str(e)}]"
     
     async def rag_query(self, query: str, include_sources: bool = True) -> Dict:
         """Complete RAG pipeline: retrieve + generate"""
