@@ -25,6 +25,5 @@ declare module 'vue-router/auto-routes' {
     '/on-call/': RouteRecordInfo<'/on-call/', '/on-call', Record<never, never>, Record<never, never>>,
     '/stream-tts': RouteRecordInfo<'/stream-tts', '/stream-tts', Record<never, never>, Record<never, never>>,
     '/stt': RouteRecordInfo<'/stt', '/stt', Record<never, never>, Record<never, never>>,
-    '/test': RouteRecordInfo<'/test', '/test', Record<never, never>, Record<never, never>>,
   }
 }

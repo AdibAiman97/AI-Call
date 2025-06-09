@@ -7,7 +7,7 @@
         class="text-foreground mr-2 ms-0 ps-0"
         :size="40"
       ></v-app-bar-nav-icon>
-      <img width="120" src="../assets/voxis.png" alt="" />
+      <img width="120" src="../assets/voxis.png" alt="" @click="goHome" class="cursor-pointer" />
     </template>
 
     <template v-if="callStore.isInCall" v-slot:append>
@@ -70,6 +70,10 @@ function toggleUserRole() {
   } else {
     router.push('/');
   }
+}
+
+function goHome() {
+  router.push('/');
 }
 </script>
 

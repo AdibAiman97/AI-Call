@@ -29,7 +29,7 @@ let source: MediaStreamAudioSourceNode;
 let stream: MediaStream;
 
 const transcript = ref("Transcript here");
-const url = "localhost:8000/stt2";
+const url = "localhost:8000/stt";
 
 const samepleRate = 16000;
 

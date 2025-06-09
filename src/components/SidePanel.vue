@@ -43,17 +43,9 @@ const menuItems = [
   { id: 1, text: "Home", path: mdiViewDashboard, route: "/admin" },
   {
     id: 2,
-    text: "Appointment",
-    path: mdiCalendarMonth,
-    route: "/admin/appointment",
-  },
-  {
-    id: 2,
     text: "FAQ Database",
     path: mdiFrequentlyAskedQuestions,
-    route: "/admin/faq-database",
-  },
-];
+    route: "/admin/faq-database", }, ];
 
 function navigate(route) {
   router.push(route);
