@@ -43,7 +43,7 @@ async function start() {
     audio: {
       echoCancellation: true,
       noiseSuppression: true,
-      autoGainControl: false,
+      autoGainControl: true,
       sampleRate: samepleRate,
     },
   });

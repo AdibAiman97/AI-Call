@@ -15,15 +15,8 @@
       </div>
     </h1>
     <p class="text-foreground mb-4">Manage your upcoming customer meetings</p>
-    <v-calendar
-      :interval-minutes="30"
-      :interval-height="48"
-      ref="calendar"
-      v-model="value"
-      :events="events"
-      :view-mode="type"
-      :weekdays="days"
-    >
+    <v-calendar :interval-minutes="30" :interval-height="48" ref="calendar" v-model="value" :events="events"
+      :view-mode="type" :weekdays="days">
     </v-calendar>
   </div>
 </template>
@@ -36,16 +29,52 @@ import { Plus, ListFilter } from "lucide-vue-next";
 const type = ref("week");
 const days = ref([0, 1, 2, 3, 4, 5, 6]);
 const value = ref(new Date());
-const events = ref([
-  // {
-  //   title: 'Time',
-  //   start: new Date(1747969200000),
-  //   end: new Date(1747969200000 + 3600000),
-  //   color: 'primary'
-  // }
-]);
-
-console.log(events.value.start);
+const events = ref(
+  [
+    {
+      "title": "Workshop",
+      "start": new Date("2025-06-09T02:00:00.000Z"),
+      "end": new Date("2025-06-09T10:00:00.000Z"),
+      "color": "calendarYellow"
+    },
+    {
+      "title": "Workshop",
+      "start": new Date("2025-06-13T01:00:00.000Z"),
+      "end": new Date("2025-06-13T02:00:00.000Z"),
+      "color": "calendarBlue"
+    },
+    {
+      "title": "Workshop",
+      "start": new Date("2025-06-10T06:00:00.000Z"),
+      "end": new Date("2025-06-10T08:00:00.000Z"),
+      "color": "calendarRed"
+    },
+    {
+      "title": "Workshop",
+      "start": new Date("2025-06-08T01:00:00.000Z"),
+      "end": new Date("2025-06-08T09:00:00.000Z"),
+      "color": "calendarYellow"
+    },
+    {
+      "title": "Holiday",
+      "start": new Date("2025-06-12T02:00:00.000Z"),
+      "end": new Date("2025-06-12T10:00:00.000Z"),
+      "color": "calendarBlue"
+    },
+    {
+      "title": "Workshop",
+      "start": new Date("2025-06-13T03:00:00.000Z"),
+      "end": new Date("2025-06-13T04:00:00.000Z"),
+      "color": "calendarYellow"
+    },
+    {
+      "title": "Holiday",
+      "start": new Date("2025-06-11T02:00:00.000Z"),
+      "end": new Date("2025-06-11T10:00:00.000Z"),
+      "color": "calendarBlue"
+    }
+  ]
+);
 
 // Options
 const types = ["week", "day"];
@@ -91,7 +120,6 @@ function randomEvent(startDay, endDay, eventDuration) {
   const randStart = rand(startDay.getTime(), endDay.getTime() - eventDuration);
   const start = new Date(randStart - (randStart % 3600000));
   const end = new Date(start.getTime() + eventDuration);
-
   return { start, end };
 }
 
@@ -124,39 +152,34 @@ function getEvents({ startWeek, endWeek }) {
 
     if (isBooked.status === false) {
       const { start, end } = isBooked;
-      result.push({
-        title: titles[rand(0, titles.length - 1)],
-        start,
-        end,
-        color: colors[rand(0, colors.length - 1)],
-      });
+
+      if (start instanceof Date && end instanceof Date) {
+        result.push({
+          title: titles[rand(0, titles.length - 1)],
+          start,
+          end,
+          color: colors[rand(0, colors.length - 1)],
+        });
+      }
     }
   }
 
   events.value = result;
-  console.clear();
-  console.log(result);
-  result.map((each) => {
-    console.log(
-      "start",
-      each.start.toLocaleString([], {
-        weekday: "short", // e.g., Mon, Tue
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    );
 
-    // console.log('start',each.start.getTime())
+  console.log('results', result);
+  console.log(new Object(result[0].start))
+  console.log(typeof new Object(result[0].start))
 
-    console.log(
-      "end",
-      each.end.toLocaleString([], {
-        weekday: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    );
-  });
+  // result.map((each) => {
+  //   console.log(
+  //     "start",
+  //     each.start.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit", })
+  //   );
+  //   console.log(
+  //     "end",
+  //     each.end.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit", })
+  //   );
+  // });
 }
 
 onMounted(() => {
@@ -165,7 +188,7 @@ onMounted(() => {
   const startWeek = adapter.startOfWeek(today);
   const endWeek = adapter.endOfWeek(today);
 
-  getEvents({ startWeek, endWeek });
+  // getEvents({ startWeek, endWeek });
 });
 </script>
 
@@ -180,16 +203,20 @@ onMounted(() => {
 /* Outer container border and rounded corners */
 .v-calendar :deep(.v-calendar__container) {
   border-color: #374151 !important;
-  border-radius: 6px !important; /* Added for rounded corners */
-  overflow: hidden; /* Crucial for rounded corners to work correctly */
+  border-radius: 6px !important;
+  /* Added for rounded corners */
+  overflow: hidden;
+  /* Crucial for rounded corners to work correctly */
 }
 
 /* Grouped border-drawing elements within v-calendar (EXCLUDING v-calendar__container now) */
 .v-calendar :deep(.v-calendar-interval__line),
 .v-calendar :deep(.v-calendar-day__row-content),
 .v-calendar :deep(.v-calendar-day__row-hairline),
-.v-calendar :deep(.v-calendar-day__row-hairline::after), /* Pseudo-element needs background-color too */
-.v-calendar :deep(.v-calendar-day__container), /* This refers to the day content container, not the main calendar container */
+.v-calendar :deep(.v-calendar-day__row-hairline::after),
+/* Pseudo-element needs background-color too */
+.v-calendar :deep(.v-calendar-day__container),
+/* This refers to the day content container, not the main calendar container */
 .v-calendar :deep(.v-calendar-day__row-without-label),
 .v-calendar :deep(.v-calendar-day__row-with-label),
 .v-calendar :deep(.v-calendar-weekly__day-grid),
@@ -206,8 +233,10 @@ onMounted(() => {
 
 /* Styling buttons in v-calendar-header with direct hex color --- */
 .v-calendar :deep(.v-calendar-header .v-calendar-header__today) {
-  text-transform: capitalize !important; /* text-capitalize */
-  color: #f9fafb !important; /* Directly set to your foreground hex color */
+  text-transform: capitalize !important;
+  /* text-capitalize */
+  color: #f9fafb !important;
+  /* Directly set to your foreground hex color */
   /* border: 0.5px solid #4b5563 !important; */
   border: none !important;
   background-color: #1f2937;
@@ -217,6 +246,7 @@ onMounted(() => {
 .v-calendar :deep(.v-calendar-header .v-btn.v-btn--variant-text) {
   background-color: transparent !important;
 }
+
 .v-calendar :deep(.v-calendar-header .v-btn.v-btn--variant-tonal) {
   background-color: transparent !important;
 }

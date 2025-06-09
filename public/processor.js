@@ -15,8 +15,7 @@ class PCMProcessor extends AudioWorkletProcessor {
 
   process(inputs) {
     const input = inputs[0][0];
-    if (input) {
-
+    if (input && !this.isSilent(input)) {
       // Convert and send buffer
       const buffer = new ArrayBuffer(input.length * 2);
       const view = new DataView(buffer);
