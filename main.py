@@ -194,6 +194,7 @@ async def rag_query_stream(
             
             async for chunk in rag_sys.generate_response_stream(query, context):
                 if chunk:
+                    print(f"{chunk}")
                     yield f"data: {json.dumps({'type': 'content', 'data': chunk})}\n\n"
             
             # Signal completion
