@@ -12,6 +12,8 @@ from pydantic import BaseModel
 import uvicorn
 import json
 
+from stt import router as stt
+
 from VertexRagSystem.rag_class import VertexRAGSystem, RAGConfig
 
 app = FastAPI()
@@ -23,6 +25,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(stt)
 
 class QueryRequest(BaseModel):
     query: str
