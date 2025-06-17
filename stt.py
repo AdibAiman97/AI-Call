@@ -105,6 +105,9 @@ async def speech_processor(
 
     """Process speech recognition in background thread"""
     # BLOCKING FUNCTION: This will run in a separate thread
+    loop = asyncio.get_running_loop()
+    stream_queue = asyncio.Queue()
+
     def process_recognition():
         try:
             responses = speech_client.streaming_recognize(
@@ -136,9 +139,14 @@ async def speech_processor(
                                 "is_user_speaking" : False,
                             }
 
-                            ai_reply = asyncio.run(generate_stream(rag_sys, transcript))
-
-                            print(f"Replies: {ai_reply}")
+                            if not response_data["is_user_speaking"]: 
+                                print("🤖 Starting LLM generation...")
+                                asyncio.run_coroutine_threadsafe(
+                                    generate_stream(rag_sys, transcript, stream_queue),
+                                    loop
+                                )
+                            else:
+                                print("🔇 Skipping LLM - user still speaking")
 
                         else:
                             # Update interim text
@@ -165,12 +173,14 @@ async def speech_processor(
         except Exception as e:
             print(f"Error in speech recognition: {e}")
 
-    # Get the current async event loop
-    loop = asyncio.get_event_loop()
+    recognition_task = asyncio.create_task(
+        loop.run_in_executor(None, process_recognition)
+    )
 
-    # ASYNC: Run the blocking function in a separate thread
-    # This keeps the async event loop free while blocking work happens in thread
-    await loop.run_in_executor(None, process_recognition)
+    await asyncio.gather(
+        recognition_task, 
+        return_exceptions=True
+        )
 
 # @router.websocket("")
 # async def stt_route(ws: WebSocket): 

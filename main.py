@@ -33,10 +33,10 @@ app.add_middleware(
 
 # app.include_router(stt)
 
-class QueryRequest(BaseModel):
-    query: str
-    include_sources: bool = True
-    top_k: Optional[int] = None
+# class QueryRequest(BaseModel):
+#     query: str
+    # include_sources: bool = True
+    # top_k: Optional[int] = None
 
 rag_sys: Optional[VertexRAGSystem] = None
 init_status = {"status": "not_started", "message" : ""}
@@ -92,8 +92,7 @@ async def startup_event():
 async def rag_query_stream(
     ws: WebSocket,
     query: Optional[str] = None,
-    include_sources: bool = True,
-    top_k: Optional[int] = None
+
 ):
     await ws.accept()
     await ws.send_text("✅ WebSocket connected to Google STT")
@@ -196,7 +195,7 @@ async def rag_query_stream(
                 audio_buffer, 
                 speech, 
                 ws, 
-                rag_sys
+                rag_sys,
             ),
             return_exceptions=True
         )
