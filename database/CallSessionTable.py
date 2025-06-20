@@ -6,7 +6,8 @@ from dotenv import load_dotenv # type: ignore
 load_dotenv()
 
 DB_USER = "postgres"
-DB_PASSWORD = os.getenv("DB_PASSWORD")
+# DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_PASSWORD = "Winson0504"
 DB_HOST = "localhost"
 DB_NAME = "voxis_ai"
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
