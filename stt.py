@@ -3,6 +3,7 @@ from google.cloud import speech_v1p1beta1 as speech
 from stream_rag import generate_stream
 from collections import deque
 from typing import Optional
+from tts import TTSConfig, TTSStreamProcessor
 
 import json
 import asyncio
@@ -106,7 +107,8 @@ async def speech_processor(
     """Process speech recognition in background thread"""
     # BLOCKING FUNCTION: This will run in a separate thread
     loop = asyncio.get_running_loop()
-    stream_queue = asyncio.Queue()
+    config = TTSConfig(voice_name="en-US-Standard-C")
+    stream_processor = TTSStreamProcessor(config)
 
     def process_recognition():
         try:
@@ -141,8 +143,60 @@ async def speech_processor(
 
                             if not response_data["is_user_speaking"]: 
                                 print("🤖 Starting LLM generation...")
+                                
+                                # Create a coroutine that consumes the async generator
+                                async def consume_stream():
+                                    try:
+                                        async for chunk in generate_stream(rag_sys, transcript):
+                                            # Process each chunk from the stream
+                                            # print(f"{chunk}")
+                                            yield chunk
+                                            # You could send these chunks to WebSocket if needed
+                                            # await ws.send_text(chunk)
+                                    except Exception as e:
+                                        print(f"Error consuming stream: {e}")
+
+                                async def handle_audio(audio_data, text):
+                                    # Your custom audio handling logic
+                                    print(f"Generated audio for: {text}")
+                                    try:
+                                        # Send audio data to frontend via WebSocket
+                                        await ws.send_json({
+                                            "type": "tts_audio",
+                                            "audio_data": audio_data,
+                                            "text": text,
+                                            "encoding": "base64"
+                                        })
+                                        # print(f"🎵 Sent audio to frontend for: '{text[:30]}...'")
+                                    except Exception as e:
+                                        print(f"Error sending audio to frontend: {e}")
+
+                                async def handle_error(error_msg, text):
+                                    """Send TTS error to frontend"""
+                                    try:
+                                        await ws.send_json({
+                                            "type": "tts_error",
+                                            "error": error_msg,
+                                            "text": text
+                                        })
+                                        print(f"Error: {error_msg}")
+                                    except Exception as e:
+                                        print(f"Error sending TTS error: {e}")
+                                    
+                                
+                                async def stream_tts():
+                                    try:
+                                        await stream_processor.process_text_stream(
+                                            consume_stream(),
+                                            on_audio_ready=handle_audio,
+                                            on_error=handle_error
+                                        )
+                                    except Exception as e:
+                                        print(f"Error streaming TTS: {e}")
+
+                                # Now run the coroutine
                                 asyncio.run_coroutine_threadsafe(
-                                    generate_stream(rag_sys, transcript, stream_queue),
+                                    stream_tts(),
                                     loop
                                 )
                             else:
@@ -180,7 +234,7 @@ async def speech_processor(
     await asyncio.gather(
         recognition_task, 
         return_exceptions=True
-        )
+    )
 
 # @router.websocket("")
 # async def stt_route(ws: WebSocket): 
