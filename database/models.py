@@ -26,8 +26,7 @@ def get_db():
 class Customer(Base):
     __tablename__ = "customers"
     
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    phone_number = Column(String, unique=True, index=True, nullable=False)
+    phone_number = Column(String, primary_key=True, index=True, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)

@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from database.models import get_db
-from database.crud import CustomerCRUD
-from database.schemas import CustomerCreate, CustomerUpdate, CustomerResponse
+from database.customer_crud import CustomerCRUD
+from database.schemas import CustomerCreate, CustomerResponse
 
 # FastAPI Router
 router = APIRouter(prefix="/customers", tags=["customers"])
@@ -22,15 +22,11 @@ def get_all_customers(db: Session = Depends(get_db)):
 def get_customer_by_phone(phone_number: str, db: Session = Depends(get_db)):
     return CustomerCRUD.get_customer_by_phone(db, phone_number)
 
-@router.get("/{customer_id}", response_model=CustomerResponse)
-def get_customer_by_id(customer_id: int, db: Session = Depends(get_db)):
-    return CustomerCRUD.get_customer_by_id(db, customer_id)
-
-@router.put("/{customer_id}", response_model=CustomerResponse)
-def update_customer(customer_id: int, customer_update: CustomerUpdate, db: Session = Depends(get_db)):
+@router.put("/phone/{phone_number}", response_model=CustomerResponse)
+def update_customer_by_phone(phone_number: str, customer_update: CustomerCreate, db: Session = Depends(get_db)):
     update_data = customer_update.dict(exclude_unset=True)
-    return CustomerCRUD.update_customer(db, customer_id, update_data)
+    return CustomerCRUD.update_customer_by_phone(db, phone_number, update_data)
 
-@router.delete("/{customer_id}")
-def delete_customer(customer_id: int, db: Session = Depends(get_db)):
-    return CustomerCRUD.delete_customer(db, customer_id) 
+@router.delete("/phone/{phone_number}")
+def delete_customer_by_phone(phone_number: str, db: Session = Depends(get_db)):
+    return CustomerCRUD.delete_customer_by_phone(db, phone_number) 

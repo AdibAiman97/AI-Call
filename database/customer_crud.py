@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
-from .models import Customer
+from database.models import Customer
 from typing import List, Optional
 
 class CustomerCRUD:
@@ -40,35 +40,35 @@ class CustomerCRUD:
         return customer
 
     @staticmethod
-    def get_customer_by_id(db: Session, customer_id: int) -> Customer:
-        customer = db.query(Customer).filter(Customer.id == customer_id).first()
-        if customer is None:
-            raise HTTPException(status_code=404, detail="Customer not found")
-        return customer
-
-    @staticmethod
-    def update_customer(db: Session, customer_id: int, update_data: dict) -> Customer:
-        db_customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    def update_customer_by_phone(db: Session, phone_number: str, update_data: dict) -> Customer:
+        db_customer = db.query(Customer).filter(Customer.phone_number == phone_number).first()
         if db_customer is None:
             raise HTTPException(status_code=404, detail="Customer not found")
         
-        # Check for unique constraints if updating phone or email
-        if "phone_number" in update_data or "email" in update_data:
+        # Check for unique constraints if updating email
+        if "email" in update_data:
             existing_customer = db.query(Customer).filter(
-                Customer.id != customer_id,
-                (Customer.phone_number == update_data.get("phone_number", "")) | 
-                (Customer.email == update_data.get("email", ""))
+                Customer.phone_number != phone_number,
+                Customer.email == update_data.get("email", "")
             ).first()
             
             if existing_customer:
                 raise HTTPException(
                     status_code=400, 
-                    detail="Another customer with this phone number or email already exists"
+                    detail="Another customer with this email already exists"
                 )
+        
+        # Don't allow updating phone_number as it's the primary key
+        if "phone_number" in update_data and update_data["phone_number"] != phone_number:
+            raise HTTPException(
+                status_code=400, 
+                detail="Cannot change phone number as it's the primary key"
+            )
         
         try:
             for key, value in update_data.items():
-                setattr(db_customer, key, value)
+                if key != "phone_number":  # Skip phone_number updates
+                    setattr(db_customer, key, value)
             
             db.commit()
             db.refresh(db_customer)
@@ -78,8 +78,8 @@ class CustomerCRUD:
             raise HTTPException(status_code=400, detail=f"Error updating customer: {str(e)}")
 
     @staticmethod
-    def delete_customer(db: Session, customer_id: int) -> dict:
-        db_customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    def delete_customer_by_phone(db: Session, phone_number: str) -> dict:
+        db_customer = db.query(Customer).filter(Customer.phone_number == phone_number).first()
         if db_customer is None:
             raise HTTPException(status_code=404, detail="Customer not found")
         

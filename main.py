@@ -1,7 +1,7 @@
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from stt import router as stt
-from api.customer import router as customer
+from api.customer_router import router as customer
 
 app = FastAPI()
 

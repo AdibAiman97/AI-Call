@@ -12,17 +12,8 @@ class CustomerCreate(BaseModel):
     purchase_purpose: str
     preferred_location: str
 
-class CustomerUpdate(BaseModel):
-    phone_number: Optional[str] = None
-    email: Optional[str] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    budget: Optional[int] = None
-    purchase_purpose: Optional[str] = None
-    preferred_location: Optional[str] = None
 
 class CustomerResponse(BaseModel):
-    id: int
     phone_number: str
     email: str
     first_name: str
