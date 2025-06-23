@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from database.models import Customer
-from typing import List, Optional
+from typing import List
 
 class CustomerCRUD:
     @staticmethod
