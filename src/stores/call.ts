@@ -29,6 +29,8 @@ export const useCallStore = defineStore("call", {
         positive: 65,
         neutral: 25,
         negative: 10,
+        key_words:
+          "pricing, enterprise, demo, follow-up, implementation, onboarding",
         summarized_content:
           "Inquiry about product features and pricing.\nDiscussed available options and provided detailed information.\nCustomer showed interest in premium package.",
         customer_suggestions:
@@ -39,7 +41,7 @@ export const useCallStore = defineStore("call", {
 
       try {
         const response = await axios.post(
-          "http://localhost:8000/call_session",
+          `${import.meta.env.VITE_API_BASE_URL}/call_session`,
           callSessionData
         );
         this.callSessionId = response.data.id;

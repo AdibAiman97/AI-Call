@@ -97,7 +97,7 @@ const callStore = useCallStore();
 const fetchCallSessionData = async () => {
   try {
     const response = await fetch(
-      `http://localhost:8000/call_session/${callStore.callSessionId}`
+      `${import.meta.env.VITE_API_BASE_URL}/call_session/${callStore.callSessionId}`
     );
 
     console.log("From Call Summary", response.data);
