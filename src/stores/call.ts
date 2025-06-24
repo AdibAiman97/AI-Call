@@ -26,17 +26,17 @@ export const useCallStore = defineStore("call", {
         start_time: this.startTime?.toISOString() || new Date().toISOString(),
         end_time: this.endTime?.toISOString() || new Date().toISOString(),
         duration: duration,
-        positive: 65,
-        neutral: 25,
-        negative: 10,
+        positive: 75,
+        neutral: 20,
+        negative: 5,
         key_words:
-          "pricing, enterprise, demo, follow-up, implementation, onboarding",
+          "property, budget, location, bedrooms, mortgage, viewing, investment, amenities",
         summarized_content:
-          "Inquiry about product features and pricing.\nDiscussed available options and provided detailed information.\nCustomer showed interest in premium package.",
+          "Customer inquired about a 3-bedroom property in the downtown location with a budget of $500,000.\nDiscussed mortgage options and financing requirements for the investment property.\nCustomer showed strong interest in scheduling a viewing and exploring nearby amenities.\nReviewed property features including modern kitchen, parking space, and proximity to schools.",
         customer_suggestions:
-          "Follow up with detailed pricing information.\nSchedule demo session for next week.\nSend product comparison chart.",
+          "Arrange property viewing for next weekend.\nProvide mortgage pre-approval documentation.\nSend detailed information about local amenities and schools.\nPrepare investment property analysis with rental yield projections.",
         admin_suggestions:
-          "Review customer's specific use case requirements.\nPrepare customized proposal.\nSchedule follow-up call within 3 business days.",
+          "Schedule property viewing appointment within 48 hours.\nConnect customer with preferred mortgage broker for financing options.\nPrepare comprehensive property report including market analysis.\nFollow up with similar properties in the same location and budget range.",
       };
 
       try {
