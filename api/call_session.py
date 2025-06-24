@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from database.connection import get_db
-from database.schema import CallSessionBase, CallSessionUpdate
+from database.schema import CallSessionBase, CallSessionUpdate, CallSessionResponse
 from services.call_session import CallSessionService
 
 router = APIRouter(prefix="/call_session", tags=["call_session"])
@@ -23,7 +23,7 @@ def get_call_session(call_session_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Call session not found")
     return call_session
 
-@router.post("/", response_model=CallSessionBase)
+@router.post("/", response_model=CallSessionResponse)
 def create_call_session(call_session_data: CallSessionBase, db: Session = Depends(get_db)):
     service = CallSessionService(db)
     return service.create(call_session_data)

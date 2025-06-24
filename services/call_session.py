@@ -22,7 +22,9 @@ class CallSessionService:
             start_time=call_session_data.start_time,
             end_time=call_session_data.end_time,
             duration=call_session_data.duration,
-            sentiment=call_session_data.sentiment,
+            positive=call_session_data.positive,
+            neutral=call_session_data.neutral,
+            negative=call_session_data.negative,
             summarized_content=call_session_data.summarized_content,
             customer_suggestions=call_session_data.customer_suggestions,
             admin_suggestions=call_session_data.admin_suggestions
