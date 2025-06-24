@@ -1,24 +1,15 @@
 <template>
   <!-- Calendar -->
-  <div>
-    <h1 class="d-flex justify-space-between text-foreground align-center mb-2">
-      Appointment
-      <div class="d-flex ga-2">
-        <v-btn class="text-capitalize text-foreground">
-          <ListFilter :size="20" class="mr-2" />
-          Filter
-        </v-btn>
-        <v-btn class="bg-primary text-background text-capitalize">
-          <Plus :size="20" class="mr-2" />
-          Add Appointment
-        </v-btn>
-      </div>
-    </h1>
-    <p class="text-foreground mb-4">Manage your upcoming customer meetings</p>
-    <v-calendar :interval-minutes="30" :interval-height="48" ref="calendar" v-model="value" :events="events"
-      :view-mode="type" :weekdays="days">
-    </v-calendar>
-  </div>
+  <v-calendar
+    :interval-minutes="30"
+    :interval-height="48"
+    ref="calendar"
+    v-model="value"
+    :events="events"
+    :view-mode="type"
+    :weekdays="days"
+  >
+  </v-calendar>
 </template>
 
 <script setup>
@@ -29,52 +20,50 @@ import { Plus, ListFilter } from "lucide-vue-next";
 const type = ref("week");
 const days = ref([0, 1, 2, 3, 4, 5, 6]);
 const value = ref(new Date());
-const events = ref(
-  [
-    {
-      "title": "Workshop",
-      "start": new Date("2025-06-09T02:00:00.000Z"),
-      "end": new Date("2025-06-09T10:00:00.000Z"),
-      "color": "calendarYellow"
-    },
-    {
-      "title": "Workshop",
-      "start": new Date("2025-06-13T01:00:00.000Z"),
-      "end": new Date("2025-06-13T02:00:00.000Z"),
-      "color": "calendarBlue"
-    },
-    {
-      "title": "Workshop",
-      "start": new Date("2025-06-10T06:00:00.000Z"),
-      "end": new Date("2025-06-10T08:00:00.000Z"),
-      "color": "calendarRed"
-    },
-    {
-      "title": "Workshop",
-      "start": new Date("2025-06-08T01:00:00.000Z"),
-      "end": new Date("2025-06-08T09:00:00.000Z"),
-      "color": "calendarYellow"
-    },
-    {
-      "title": "Holiday",
-      "start": new Date("2025-06-12T02:00:00.000Z"),
-      "end": new Date("2025-06-12T10:00:00.000Z"),
-      "color": "calendarBlue"
-    },
-    {
-      "title": "Workshop",
-      "start": new Date("2025-06-13T03:00:00.000Z"),
-      "end": new Date("2025-06-13T04:00:00.000Z"),
-      "color": "calendarYellow"
-    },
-    {
-      "title": "Holiday",
-      "start": new Date("2025-06-11T02:00:00.000Z"),
-      "end": new Date("2025-06-11T10:00:00.000Z"),
-      "color": "calendarBlue"
-    }
-  ]
-);
+const events = ref([
+  {
+    title: "Workshop",
+    start: new Date("2025-06-09T02:00:00.000Z"),
+    end: new Date("2025-06-09T10:00:00.000Z"),
+    color: "calendarYellow",
+  },
+  {
+    title: "Workshop",
+    start: new Date("2025-06-13T01:00:00.000Z"),
+    end: new Date("2025-06-13T02:00:00.000Z"),
+    color: "calendarBlue",
+  },
+  {
+    title: "Workshop",
+    start: new Date("2025-06-10T06:00:00.000Z"),
+    end: new Date("2025-06-10T08:00:00.000Z"),
+    color: "calendarRed",
+  },
+  {
+    title: "Workshop",
+    start: new Date("2025-06-08T01:00:00.000Z"),
+    end: new Date("2025-06-08T09:00:00.000Z"),
+    color: "calendarYellow",
+  },
+  {
+    title: "Holiday",
+    start: new Date("2025-06-12T02:00:00.000Z"),
+    end: new Date("2025-06-12T10:00:00.000Z"),
+    color: "calendarBlue",
+  },
+  {
+    title: "Workshop",
+    start: new Date("2025-06-13T03:00:00.000Z"),
+    end: new Date("2025-06-13T04:00:00.000Z"),
+    color: "calendarYellow",
+  },
+  {
+    title: "Holiday",
+    start: new Date("2025-06-11T02:00:00.000Z"),
+    end: new Date("2025-06-11T10:00:00.000Z"),
+    color: "calendarBlue",
+  },
+]);
 
 // Options
 const types = ["week", "day"];
@@ -166,9 +155,9 @@ function getEvents({ startWeek, endWeek }) {
 
   events.value = result;
 
-  console.log('results', result);
-  console.log(new Object(result[0].start))
-  console.log(typeof new Object(result[0].start))
+  console.log("results", result);
+  console.log(new Object(result[0].start));
+  console.log(typeof new Object(result[0].start));
 
   // result.map((each) => {
   //   console.log(
