@@ -28,8 +28,7 @@
       </v-btn>
 
       <v-btn
-        @click="callStore.endCall()"
-        to="/call-summary"
+        @click="handleEndCall"
         class="bg-error"
         size="70"
         rounded="circle"
@@ -46,8 +45,10 @@
 import { AudioLines, Volume2, Phone } from "lucide-vue-next";
 import { useCallStore } from "@/stores/call";
 import { onUnmounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 
 const callStore = useCallStore();
+const router = useRouter();
 
 const elapsedSeconds = ref(0);
 let timer = null;
@@ -63,6 +64,22 @@ const formattedTime = computed(() => {
   const ss = String(elapsedSeconds.value % 60).padStart(2, "0");
   return `${hh}${mm}:${ss}`;
 });
+
+const handleEndCall = async () => {
+  try {
+    const savedSession = await callStore.endCall(formattedTime.value);
+    // Navigate to call summary with the saved session ID
+    if (savedSession && savedSession.id) {
+      await router.push(`/call-summary`);
+    } else {
+      await router.push('/call-summary');
+    }
+  } catch (error) {
+    console.error('Error ending call:', error);
+    // Still navigate to call summary even if save fails
+    await router.push('/call-summary');
+  }
+}
 
 // Watch when the call starts/stops
 watch(
