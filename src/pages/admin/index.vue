@@ -148,7 +148,7 @@
               <!-- Key Topics -->
               <v-card class="rounded-lg elevation-2">
                 <v-card-title class="text-h6 text-capitalize flex-shrink-0"
-                  >Key Topics</v-card-title
+                  >Key Words</v-card-title
                 >
                 <v-card-text class="px-4">
                   <v-chip-group v-if="!loading && keywordsList.length > 0">
