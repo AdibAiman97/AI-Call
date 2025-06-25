@@ -21,10 +21,11 @@ class CallSessionService:
             cust_id=call_session_data.cust_id,
             start_time=call_session_data.start_time,
             end_time=call_session_data.end_time,
-            duration=call_session_data.duration,
+            duration_secs=call_session_data.duration_secs,
             positive=call_session_data.positive,
             neutral=call_session_data.neutral,
             negative=call_session_data.negative,
+            key_words=call_session_data.key_words,
             summarized_content=call_session_data.summarized_content,
             customer_suggestions=call_session_data.customer_suggestions,
             admin_suggestions=call_session_data.admin_suggestions

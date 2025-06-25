@@ -9,7 +9,7 @@ from services.call_session import CallSessionService
 router = APIRouter(prefix="/call_session", tags=["call_session"])
 
 @router.get("/", response_model=List[CallSessionBase])
-def get_call_sessions(customer_id: str, db: Session = Depends(get_db)):
+def get_call_sessions(customer_id: str = None, db: Session = Depends(get_db)):
     service = CallSessionService(db)
     if customer_id:
         return service.get_by_customer_id(customer_id)
