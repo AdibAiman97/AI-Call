@@ -8,11 +8,11 @@
     </div>
 
     <div class="d-flex align-center justify-center">
-      <AudioLines size="50" />
-      <AudioLines size="70" />
-      <AudioLines size="50" />
-      <AudioLines size="70" />
-      <AudioLines size="50" />
+      <AudioLines :size="50" />
+      <AudioLines :size="70" />
+      <AudioLines :size="50" />
+      <AudioLines :size="70" />
+      <AudioLines :size="50" />
     </div>
 
     <div class="mb-4">
@@ -28,7 +28,7 @@
       </v-btn>
 
       <v-btn
-        @click="callStore.endCall()"
+        @click="endCall()"
         to="/call-summary"
         class="bg-error"
         size="70"
@@ -42,15 +42,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { AudioLines, Volume2, Phone } from "lucide-vue-next";
 import { useCallStore } from "@/stores/call";
-import { onUnmounted, ref, watch } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
 
 const callStore = useCallStore();
 
 const elapsedSeconds = ref(0);
-let timer = null;
+let timer = null as any;
 
 const formattedTime = computed(() => {
   const hours = Math.floor(elapsedSeconds.value / 3600);
@@ -85,4 +85,42 @@ watch(
 onUnmounted(() => {
   if (timer) clearInterval(timer);
 });
+
+onMounted(()=> {
+  startCall()
+})
+
+async function startCall() {
+  try {
+    await callStore.startCall()
+    console.log('✅ Call started from component')
+  } catch (error) {
+    console.error('🚫 Failed to start call:', error)
+    // You could show a toast notification here
+  }
+}
+
+// Handle ending the call
+function endCall() {
+  callStore.endCall()
+  console.log('✅ Call ended from component')
+}
+
+// Handle clearing audio queue
+function clearAudioQueue() {
+  callStore.clearAudioQueue()
+  console.log('✅ Audio queue cleared from component')
+}
+
+// Format time for display
+function formatTime(date: Date): string {
+  return date.toLocaleTimeString()
+}
+
+// Cleanup when component unmounts
+onBeforeUnmount(() => {
+  if (callStore.isInCall) {
+    callStore.endCall()
+  }
+})
 </script>
