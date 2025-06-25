@@ -348,7 +348,8 @@ const customerInfo = computed(() => {
   if (!callSessionData.value) return { name: "", duration: "", time: "" };
   return {
     name: callSessionData.value.cust_id || "Unknown Customer",
-    duration: callSessionData.value.duration || "0 min",
+    duration:
+      callStore.formatTime(callSessionData.value.duration_secs) || "0 min",
     time: formatDateTime(callSessionData.value.start_time),
   };
 });

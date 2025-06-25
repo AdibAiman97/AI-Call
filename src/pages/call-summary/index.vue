@@ -7,7 +7,7 @@
   </div>
 
   <p class="text-foreground pb-2 mb-4" v-if="!loading && callSessionData">
-    {{ callSessionData.duration }} •
+    {{ callStore.formatTime(callSessionData.duration_secs) }} •
     {{ formatDateTime(callSessionData.start_time) }}
   </p>
   <p class="text-foreground pb-2 mb-4" v-else-if="loading">
@@ -83,10 +83,8 @@
 
 <script setup>
 import { ref, onMounted } from "vue";
-import { useRoute } from "vue-router";
 import { useCallStore } from "../../stores/call";
 
-const route = useRoute();
 const summaryList = ref([]);
 const customerNextSteps = ref([]);
 const callSessionData = ref(null);
@@ -97,7 +95,9 @@ const callStore = useCallStore();
 const fetchCallSessionData = async () => {
   try {
     const response = await fetch(
-      `${import.meta.env.VITE_API_BASE_URL}/call_session/${callStore.callSessionId}`
+      `${import.meta.env.VITE_API_BASE_URL}/call_session/${
+        callStore.callSessionId
+      }`
     );
 
     console.log("From Call Summary", response.data);

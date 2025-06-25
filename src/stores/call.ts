@@ -199,7 +199,7 @@ export const useCallStore = defineStore("call", {
         cust_id: "Chee Tat",
         start_time: this.startTime?.toISOString() || new Date().toISOString(),
         end_time: this.endTime?.toISOString() || new Date().toISOString(),
-        duration: durationSeconds,
+        duration_secs: durationSeconds,
         positive: 75,
         neutral: 20,
         negative: 5,
@@ -466,6 +466,21 @@ export const useCallStore = defineStore("call", {
       } catch (error) {
         console.error("🚫 Error playing audio:", error);
         throw error;
+      }
+    },
+
+    formatTime(timeInSecs: number) {
+      const minutes = Math.floor(timeInSecs / 60);
+      const seconds = timeInSecs % 60;
+
+      if (minutes === 0) {
+        return `${seconds} second${seconds !== 1 ? "s" : ""}`;
+      } else if (seconds === 0) {
+        return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
+      } else {
+        return `${minutes} minute${minutes !== 1 ? "s" : ""} ${seconds} second${
+          seconds !== 1 ? "s" : ""
+        }`;
       }
     },
   },
