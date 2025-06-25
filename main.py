@@ -1,6 +1,5 @@
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from stt import router as stt
 from api.customer_router import router as customer
 
 app = FastAPI()
@@ -13,5 +12,4 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(stt)
 app.include_router(customer)
