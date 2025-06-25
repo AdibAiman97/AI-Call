@@ -89,20 +89,16 @@ async def startup_event():
 
 # @app.post("/query/stream")
 @app.websocket("/stt")
-async def rag_query_stream(
-    ws: WebSocket,
-    query: Optional[str] = None,
-
-):
+async def rag_query_stream(ws: WebSocket, query: Optional[str] = None):
     await ws.accept()
     await ws.send_text("✅ WebSocket connected to Google STT")
 
-        # Create Google Speech client. 
+    # Create Google Speech client
     speech_client = speech.SpeechClient()
     audio_buffer = AudioBuffer()
     transcript_manager = TranscriptManager()
 
-    # Configuration setup.
+    # Configuration setup
     config = speech.RecognitionConfig(
         encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
         sample_rate_hertz=16000,
@@ -117,9 +113,11 @@ async def rag_query_stream(
     if not rag_sys:
         raise HTTPException(status_code=503, detail="RAG system not initialized")
 
+    # ✅ Track WebSocket state
+    ws_closed = False
+
     try:
-    # ASYNC: Run both async functions at the same time
-    # gather() allows async functions to run concurrently
+        # ASYNC: Run both async functions at the same time
         results = await asyncio.gather(
             audio_receiver(ws, audio_buffer),
             speech_processor(
@@ -133,19 +131,35 @@ async def rag_query_stream(
             ),
             return_exceptions=True
         )
+        
+        # ✅ Check if any task returned an exception
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                print(f"Task {i} failed with exception: {result}")
 
     except Exception as e:
         print(f"Error in STT processing: {e}")
-    else:
+    
+    finally:
+        print("🧹 Cleaning up WebSocket session...")
+        
+        # ✅ Always finish audio buffer
         audio_buffer.finish()
         
-        # Send final complete transcript when session ends
-        final_complete = transcript_manager.get_final_only()
-        if final_complete:
-            await ws.send_text(json.dumps({
-                "type": "session_complete",
-                "final_transcript": final_complete
-            }))
+        # ✅ Only send final message if WebSocket is still open
+        try:
+            # Check if WebSocket is still connected before sending
+            if ws.application_state != 3:  # 3 = DISCONNECTED
+                final_complete = transcript_manager.get_final_only()
+                if final_complete:
+                    await ws.send_text(json.dumps({
+                        "type": "session_complete",
+                        "final_transcript": final_complete
+                    }))
+            else:
+                print("WebSocket already closed, skipping final message")
+        except Exception as e:
+            print(f"Error sending final transcript: {e}")
         
         print("STT WebSocket session ended")
 
