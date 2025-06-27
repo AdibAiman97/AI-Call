@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from database.models.customer import Customer
+from database.schemas import CustomerCreate
 from typing import List
 
 

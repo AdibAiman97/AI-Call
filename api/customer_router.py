@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import List
-
 from database.connection import get_db
 from services.customer_crud import CustomerCRUD
 from database.schemas import CustomerCreate, CustomerResponse

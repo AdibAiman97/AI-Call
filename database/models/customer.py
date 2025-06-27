@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, func
 from database.connection import Base
+from datetime import datetime
 
 
 class Customer(Base):

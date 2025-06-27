@@ -63,8 +63,8 @@ class TranscriptManager:
             return self.final_transcript.strip()
 
 
-@router.websocket("")
-async def stt_route(ws: WebSocket):
+@router.websocket("/{call_session_id}")
+async def stt_route(ws: WebSocket, call_session_id: int):
     await ws.accept()
     await ws.send_text("✅ WebSocket connected to Google STT")
 
@@ -194,6 +194,22 @@ async def stt_route(ws: WebSocket):
         # Send final complete transcript when session ends
         final_complete = transcript_manager.get_final_only()
         if final_complete:
+            # Save to database
+            from database.connection import SessionLocal
+            from database.transcript_crud import TranscriptCRUD
+            from database.schemas import TranscriptCreate
+
+            db = SessionLocal()
+            try:
+                transcript_data = TranscriptCreate(
+                    session_id=call_session_id,
+                    message=final_complete,
+                    message_by="System",
+                )
+                TranscriptCRUD.create_transcript(db, transcript=transcript_data)
+            finally:
+                db.close()
+
             await ws.send_text(
                 json.dumps(
                     {"type": "session_complete", "final_transcript": final_complete}
