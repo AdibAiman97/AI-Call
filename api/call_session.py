@@ -16,7 +16,7 @@ def get_call_sessions(customer_id: str = None, db: Session = Depends(get_db)):
     return service.get_all()
 
 @router.get("/{call_session_id}", response_model=CallSessionBase)
-def get_call_session(call_session_id: int, db: Session = Depends(get_db)):
+def get_call_session(call_session_id: int = 1, db: Session = Depends(get_db)):
     service = CallSessionService(db)
     call_session = service.get_by_id(call_session_id)
     if not call_session:
@@ -42,4 +42,3 @@ def delete_call_session(call_session_id: int, db: Session = Depends(get_db)):
     if not service.delete(call_session_id):
         raise HTTPException(status_code=404, detail="Call session not found")
     return {"message": "Call session deleted successfully"}
-    
