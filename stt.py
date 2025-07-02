@@ -1,5 +1,5 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from google.cloud import speech_v1p1beta1 as speech
+from google.cloud import speech
 from stream_rag import generate_stream
 from collections import deque
 from typing import Optional
@@ -8,8 +8,42 @@ from tts import TTSConfig, TTSStreamProcessor
 import json
 import asyncio
 import threading
+import time
 
 router = APIRouter(prefix="/stt")
+
+class TTSStateManager:
+    """Manages TTS playback state to coordinate with speech recognition"""
+    def __init__(self):
+        self.is_tts_active = False
+        self.tts_start_time = None
+        self.lock = threading.Lock()
+    
+    def start_tts(self):
+        """Mark TTS as active"""
+        with self.lock:
+            self.is_tts_active = True
+            self.tts_start_time = time.time()
+            # print("🔊 TTS playback started")
+    
+    def end_tts(self):
+        """Mark TTS as finished"""
+        with self.lock:
+            self.is_tts_active = False
+            self.tts_start_time = None
+            # print("🔇 TTS playback ended")
+    
+    def is_active(self) -> bool:
+        """Check if TTS is currently active"""
+        with self.lock:
+            return self.is_tts_active
+    
+    def get_duration(self) -> float:
+        """Get how long TTS has been active"""
+        with self.lock:
+            if self.is_tts_active and self.tts_start_time:
+                return time.time() - self.tts_start_time
+            return 0.0
 
 class AudioBuffer:
     def __init__(self):
@@ -62,6 +96,7 @@ class TranscriptManager:
         """Get only the final transcript"""
         with self.lock:
             return self.final_transcript.strip()
+
 # ===============================================================
 
 # BLOCKING FUNCTION: This will run in a separate thread
@@ -77,20 +112,46 @@ def audio_generator(audio_buffer,speech):
 
 # ASYNC: Handles WebSocket Communications
 async def audio_receiver(ws, audio_buffer):
-    """Receive audio chunks from WebSocket"""
+    """Receive audio chunks from WebSocket with improved error handling"""
     try:
+        print("🎧 Audio receiver started")
         while True:
-            # async/await without blocking
-            chunk = await ws.receive_bytes()
-
-            # add to thread-safe buffer (quick op, non-blocking)
-            audio_buffer.add_chunk(chunk)
-    except WebSocketDisconnect:
-        print("WebSocket disconnected by client")
+            # Check WebSocket state before attempting to receive
+            if ws.application_state == 3:  # DISCONNECTED
+                print("🔌 WebSocket disconnected - stopping audio receiver")
+                break
+                
+            try:
+                # async/await without blocking
+                chunk = await ws.receive_bytes()
+                
+                # add to thread-safe buffer (quick op, non-blocking)
+                if not audio_buffer.is_finished():
+                    audio_buffer.add_chunk(chunk)
+                else:
+                    print("🛑 Audio buffer finished - stopping receiver")
+                    break
+                    
+            except asyncio.CancelledError:
+                print("🛑 Audio receiver cancelled")
+                raise
+            except WebSocketDisconnect:
+                print("🔌 WebSocket disconnected by client")
+                break
+            except Exception as chunk_error:
+                print(f"❌ Error receiving audio chunk: {chunk_error}")
+                # Don't break on single chunk errors, continue receiving
+                continue
+                
+    except asyncio.CancelledError:
+        print("🛑 Audio receiver task cancelled")
+        raise
     except Exception as e:
-        print(f"Error receiving audio: {e}")
+        print(f"❌ Fatal error in audio receiver: {e}")
+        raise
     finally:
         # mark buffer as finished (thread-safe operation)
+        print("🧹 Audio receiver cleanup - marking buffer as finished")
         audio_buffer.finish()
 
 # ASYNC: Manages the blocking speech processing
@@ -102,12 +163,17 @@ async def speech_processor(
     audio_buffer, 
     speech, 
     ws, 
-    rag_sys):
-    """Process speech recognition with proper coroutine handling"""
+    rag_sys,
+    tts_state_manager=None):
+    """Process speech recognition with TTS state awareness"""
     
     loop = asyncio.get_running_loop()
     config = TTSConfig(voice_name="en-US-Standard-C")
     stream_processor = TTSStreamProcessor(config)
+    
+    # Create TTS state manager if not provided
+    if tts_state_manager is None:
+        tts_state_manager = TTSStateManager()
 
     def process_recognition():
         try:
@@ -119,7 +185,12 @@ async def speech_processor(
             for response in responses:
                 # ✅ Check WebSocket state before processing
                 if ws.application_state == 3:  # DISCONNECTED
-                    print("WebSocket disconnected, stopping speech processing")
+                    print("🔌 WebSocket disconnected, stopping speech processing")
+                    break
+                
+                # Also check if audio buffer is finished (indicates session restart)
+                if audio_buffer.is_finished():
+                    print("🛑 Audio buffer finished, stopping speech processing")
                     break
                     
                 if response.results:
@@ -156,6 +227,9 @@ async def speech_processor(
                                     print(f"Generated audio for: {text}")
                                     try:
                                         if ws.application_state != 3:
+                                            # Mark TTS as active when first audio is sent
+                                            tts_state_manager.start_tts()
+                                            
                                             message = {
                                                 "type": "tts_audio",
                                                 "audio_data": audio_data,
@@ -168,6 +242,9 @@ async def speech_processor(
 
                                 async def handle_error(error_msg, text):
                                     try:
+                                        # End TTS on error
+                                        tts_state_manager.end_tts()
+                                        
                                         if ws.application_state != 3:
                                             await ws.send_json({
                                                 "type": "tts_error",
@@ -184,14 +261,21 @@ async def speech_processor(
                                             on_audio_ready=handle_audio,
                                             on_error=handle_error
                                         )
+                                        # Mark TTS as finished when streaming completes
+                                        # print("🎵 TTS streaming completed")
+                                        tts_state_manager.end_tts()
                                     except Exception as e:
                                         print(f"Error streaming TTS: {e}")
+                                        # End TTS on error
+                                        tts_state_manager.end_tts()
 
                                 # ✅ Properly handle the coroutine
                                 try:
                                     asyncio.run_coroutine_threadsafe(stream_tts(), loop)
                                 except Exception as e:
                                     print(f"Error running TTS coroutine: {e}")
+                                    # End TTS on error
+                                    tts_state_manager.end_tts()
                             else:
                                 print("🔇 Skipping LLM - user still speaking")
 
@@ -220,13 +304,43 @@ async def speech_processor(
                             print(f"Error sending WebSocket message: {e}")
                         
         except Exception as e:
-            print(f"Error in speech recognition: {e}")
+            error_message = str(e)
+            print(f"Error in speech recognition: {error_message}")
+            
+            # Check for specific timeout errors
+            is_timeout_error = ("Audio Timeout Error" in error_message or 
+                               "Long duration elapsed without audio" in error_message or
+                               "400" in error_message)
+            
+            if is_timeout_error:
+                # Check if timeout occurred during TTS playback
+                if tts_state_manager.is_active():
+                    tts_duration = tts_state_manager.get_duration()
+                    print(f"🔊 Timeout during TTS playback (duration: {tts_duration:.1f}s) - this is expected")
+                    print("🔄 Speech timeout during TTS - propagating for retry")
+                    # End TTS state since we're restarting
+                    tts_state_manager.end_tts()
+                else:
+                    print("🔄 Speech timeout detected - propagating for retry")
+                
+                # Re-raise timeout errors so the retry mechanism can handle them
+                raise e
 
     # ✅ Properly await the executor task
     try:
         await loop.run_in_executor(None, process_recognition)
     except Exception as e:
-        print(f"Error in speech processor: {e}")
+        error_message = str(e)
+        print(f"Error in speech processor: {error_message}")
+        
+        # Propagate timeout errors for retry mechanism
+        if ("Audio Timeout Error" in error_message or 
+            "Long duration elapsed without audio" in error_message or
+            "400" in error_message):
+            print("🔄 Propagating timeout error for retry")
+            raise e
+        else:
+            print(f"💥 Non-recoverable speech processor error: {error_message}")
 # async def speech_processor(
 #     speech_client, 
 #     streaming_config, 

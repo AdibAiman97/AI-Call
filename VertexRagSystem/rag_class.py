@@ -332,7 +332,10 @@ class VertexRAGSystem:
         prompt_parts.append(f"Current Question: {prompt}")
         
         if context:
-            prompt_parts.append("\nPlease answer the question based on the context provided above and the conversation history. If the context doesn't contain relevant information, please say so.")
+            prompt_parts.append("""\n
+            Please answer the question based on the context provided above and the conversation history. If the context doesn't contain relevant information, please say so.
+            Always keep your responses short and precise.
+            """)
         
         full_prompt = "\n".join(prompt_parts)
 
