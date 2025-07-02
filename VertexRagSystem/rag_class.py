@@ -10,6 +10,11 @@ import vertexai
 from vertexai.language_models import TextEmbeddingModel
 from vertexai.generative_models import GenerativeModel, Part, Content
 
+# LangChain imports for memory management
+from langchain.memory import ConversationSummaryBufferMemory
+from langchain_google_vertexai import ChatVertexAI
+from langchain_core.messages import HumanMessage, AIMessage
+
 # Configuration
 @dataclass
 class RAGConfig:
@@ -20,9 +25,12 @@ class RAGConfig:
     max_output_tokens: int = 1000
     temperature: float = 0.7
     top_k_docs: int = 3
+    # Memory configuration
+    max_token_limit: int = 2000  # Token limit for memory buffer
+    return_messages: bool = True  # Return messages format for memory
 
 class VertexRAGSystem:
-    """Complete RAG system using GCP Vertex AI"""
+    """Complete RAG system using GCP Vertex AI with LangChain memory management"""
     
     def __init__(self, config: RAGConfig):
         self.config = config
@@ -31,8 +39,12 @@ class VertexRAGSystem:
         self.knowledge_base = []
         self.embedded_docs = []
         
+        # LangChain memory components
+        self.chat_model = None  # For memory summarization
+        self.memory = None
+        
     async def initialize(self):
-        """Initialize both embedding and LLM models"""
+        """Initialize both embedding and LLM models along with memory"""
         try:
             # Initialize Vertex AI
             vertexai.init(project=self.config.project_id, location=self.config.location)
@@ -41,14 +53,102 @@ class VertexRAGSystem:
             self.embedding_model = TextEmbeddingModel.from_pretrained(self.config.embedding_model)
             print(f"✅ Embedding model '{self.config.embedding_model}' initialized")
             
-            # Initialize LLM model
+            # Initialize LLM model (direct VertexAI for streaming)
             self.llm_model = GenerativeModel(self.config.llm_model)
             print(f"✅ LLM model '{self.config.llm_model}' initialized")
+            
+            # Initialize LangChain ChatVertexAI for memory management
+            self.chat_model = ChatVertexAI(
+                model_name=self.config.llm_model,
+                project=self.config.project_id,
+                location=self.config.location,
+                temperature=self.config.temperature,
+                max_output_tokens=self.config.max_output_tokens
+            )
+            print(f"✅ LangChain ChatVertexAI model initialized for memory")
+            
+            # Initialize ConversationSummaryBufferMemory
+            self.memory = ConversationSummaryBufferMemory(
+                llm=self.chat_model,
+                max_token_limit=self.config.max_token_limit,
+                return_messages=self.config.return_messages
+            )
+            print(f"✅ ConversationSummaryBufferMemory initialized with token limit: {self.config.max_token_limit}")
             
         except Exception as e:
             print(f"❌ Initialization failed: {e}")
             raise
     
+    # MEMORY MANAGEMENT METHODS
+    
+    def get_conversation_history(self) -> str:
+        """Get formatted conversation history from memory"""
+        if not self.memory:
+            return ""
+        
+        try:
+            # Get the buffer (recent messages + summary if exists)
+            messages = self.memory.chat_memory.messages
+            
+            if not messages:
+                return ""
+            
+            # Format messages for context
+            history_parts = []
+            
+            # Add summary if it exists
+            if hasattr(self.memory, 'moving_summary_buffer') and self.memory.moving_summary_buffer:
+                history_parts.append(f"Previous conversation summary: {self.memory.moving_summary_buffer}")
+            
+            # Add recent messages
+            for message in messages:
+                if isinstance(message, HumanMessage):
+                    history_parts.append(f"Human: {message.content}")
+                elif isinstance(message, AIMessage):
+                    history_parts.append(f"Assistant: {message.content}")
+            
+            return "\n".join(history_parts)
+            
+        except Exception as e:
+            print(f"⚠️ Error getting conversation history: {e}")
+            return ""
+    
+    def add_to_memory(self, human_input: str, ai_response: str):
+        """Add human input and AI response to memory"""
+        if not self.memory:
+            print("⚠️ Memory not initialized")
+            return
+        
+        try:
+            self.memory.save_context(
+                inputs={"input": human_input},
+                outputs={"output": ai_response}
+            )
+            print(f"💾 Added conversation to memory")
+        except Exception as e:
+            print(f"⚠️ Error adding to memory: {e}")
+    
+    def clear_memory(self):
+        """Clear conversation memory"""
+        if self.memory:
+            self.memory.clear()
+            print("🗑️ Memory cleared")
+    
+    def get_memory_stats(self) -> Dict:
+        """Get memory statistics"""
+        if not self.memory:
+            return {"status": "Memory not initialized"}
+        
+        try:
+            messages = self.memory.chat_memory.messages
+            return {
+                "total_messages": len(messages),
+                "has_summary": bool(hasattr(self.memory, 'moving_summary_buffer') and self.memory.moving_summary_buffer),
+                "memory_initialized": True
+            }
+        except Exception as e:
+            return {"error": str(e), "memory_initialized": False}
+
     # EMBEDDING FUNCTIONS
     
     def add_documents(self, documents: List[Dict[str, str]]):
@@ -158,22 +258,33 @@ class VertexRAGSystem:
     async def generate_response(
         self, 
         prompt: str,
-        context: Optional[str] = None
-         ) -> str:
-        """Generate response using LLM with optional context"""
+        context: Optional[str] = None,
+        use_memory: bool = True
+    ) -> str:
+        """Generate response using LLM with optional context and conversation memory"""
         if not self.llm_model:
             raise ValueError("LLM model not initialized")
         
-        # Prepare the full prompt
+        # Get conversation history if memory is enabled
+        conversation_history = ""
+        if use_memory and self.memory:
+            conversation_history = self.get_conversation_history()
+        
+        # Prepare the full prompt with context and memory
+        prompt_parts = []
+        
+        if conversation_history:
+            prompt_parts.append(f"Conversation History:\n{conversation_history}\n")
+        
         if context:
-            full_prompt = f"""Context information:
-    {context}
-
-    Question: {prompt}
-
-    Please answer the question based on the context provided above. If the context doesn't contain relevant information, please say so."""
-        else:
-            full_prompt = prompt
+            prompt_parts.append(f"Context information:\n{context}\n")
+        
+        prompt_parts.append(f"Current Question: {prompt}")
+        
+        if context:
+            prompt_parts.append("\nPlease answer the question based on the context provided above and the conversation history. If the context doesn't contain relevant information, please say so.")
+        
+        full_prompt = "\n".join(prompt_parts)
         
         try:
             response = await self.llm_model.generate_content_async(
@@ -185,7 +296,13 @@ class VertexRAGSystem:
             )
             
             if response.candidates and response.candidates[0].content:
-                return response.candidates[0].content.parts[0].text
+                ai_response = response.candidates[0].content.parts[0].text
+                
+                # Add to memory if enabled
+                if use_memory:
+                    self.add_to_memory(prompt, ai_response)
+                
+                return ai_response
             else:
                 return "Sorry, I couldn't generate a response."
                 
@@ -193,51 +310,79 @@ class VertexRAGSystem:
             print(f"❌ LLM generation failed: {e}")
             return f"Error generating response: {str(e)}"
 
-    async def generate_response_stream(self, prompt: str, context: Optional[str] = None):
+    async def generate_response_stream(self, prompt: str, context: Optional[str] = None, use_memory: bool = True):
+        """Generate streaming response with memory support"""
         if not self.llm_model:
             raise ValueError("LLM model not initialized")
 
+        # Get conversation history if memory is enabled
+        conversation_history = ""
+        if use_memory and self.memory:
+            conversation_history = self.get_conversation_history()
+
+        # Prepare the full prompt with context and memory
+        prompt_parts = []
+        
+        if conversation_history:
+            prompt_parts.append(f"Conversation History:\n{conversation_history}\n")
+        
         if context:
-            full_prompt = f"""Context information:
-            {context}
-
-            Question: {prompt}
-
-            Please answer the question based on the context provided above. If the context doesn't contain relevant information, please say so."""
-        else:
-            full_prompt = prompt
+            prompt_parts.append(f"Context information:\n{context}\n")
+        
+        prompt_parts.append(f"Current Question: {prompt}")
+        
+        if context:
+            prompt_parts.append("\nPlease answer the question based on the context provided above and the conversation history. If the context doesn't contain relevant information, please say so.")
+        
+        full_prompt = "\n".join(prompt_parts)
 
         try:
+            # Collect the full response for memory storage
+            full_response = ""
+            
             # Stream content from the LLM
             response = self.llm_model.generate_content(
-                    full_prompt,
-                    generation_config={
-                        "temperature": self.config.temperature,
-                        "max_output_tokens": self.config.max_output_tokens
-                    },
-                    stream=True
-                )
+                full_prompt,
+                generation_config={
+                    "temperature": self.config.temperature,
+                    "max_output_tokens": self.config.max_output_tokens
+                },
+                stream=True
+            )
                 
             for chunk in response:
                 if chunk.candidates and chunk.candidates[0].content:
                     text = chunk.candidates[0].content.parts[0].text
+                    full_response += text
                     yield text
+            
+            # Add complete conversation to memory after streaming is done
+            if use_memory and full_response:
+                self.add_to_memory(prompt, full_response)
+                
         except Exception as e:
-            yield f"\n[Error generating response: {str(e)}]"
+            error_msg = f"\n[Error generating response: {str(e)}]"
+            yield error_msg
     
-    async def rag_query(self, query: str, include_sources: bool = True) -> Dict:
-        """Complete RAG pipeline: retrieve + generate"""
+    async def rag_query(self, query: str, include_sources: bool = True, use_memory: bool = True) -> Dict:
+        """Complete RAG pipeline: retrieve + generate with memory support"""
         try:
             # Step 1: Retrieve relevant documents
             relevant_docs = await self.retrieve_relevant_docs(query)
             
             if not relevant_docs:
-                return {
+                result = {
                     "query": query,
                     "answer": "I couldn't find any relevant information in the knowledge base.",
                     "sources": [],
                     "error": None
                 }
+                
+                # Still add to memory even if no docs found
+                if use_memory:
+                    self.add_to_memory(query, result["answer"])
+                
+                return result
             
             # Step 2: Prepare context from retrieved documents
             context_parts = []
@@ -253,25 +398,32 @@ class VertexRAGSystem:
             
             context = "\n".join(context_parts)
             
-            # Step 3: Generate response using LLM
-            answer = await self.generate_response(query, context)
+            # Step 3: Generate response using LLM with memory
+            answer = await self.generate_response(query, context, use_memory=use_memory)
             
             result = {
                 "query": query,
                 "answer": answer,
                 "sources": sources if include_sources else [],
-                "error": None
+                "error": None,
+                "memory_stats": self.get_memory_stats() if use_memory else None
             }
             
             return result
             
         except Exception as e:
-            return {
+            error_result = {
                 "query": query,
                 "answer": "An error occurred while processing your query.",
                 "sources": [],
                 "error": str(e)
             }
+            
+            # Add error to memory if enabled
+            if use_memory:
+                self.add_to_memory(query, error_result["answer"])
+            
+            return error_result
     
     # UTILITY FUNCTIONS
     
