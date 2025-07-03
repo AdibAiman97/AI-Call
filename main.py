@@ -1,12 +1,4 @@
-"""
-GCP Vertex AI RAG (Retrieval-Augmented Generation) System
-A complete implementation with embedding and LLM capabilities
-"""
-
-
-# Packages
-from typing import List, Dict, Optional, Tuple
-from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -15,6 +7,13 @@ from stt import AudioBuffer, TranscriptManager, audio_generator, audio_receiver,
 from VertexRagSystem.rag_class import VertexRAGSystem, RAGConfig
 from google.cloud import speech
 from collections import deque
+
+from api.customer_router import router as customer_router
+from api.call_session_router import router as call_session_router
+from api.transcript_router import router as transcript_router
+from api.appointment_router import router as appointment_router
+from api.property_router import router as property_router
+from database.connection import engine, Base
 
 import uvicorn
 import asyncio
@@ -30,6 +29,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+Base.metadata.create_all(bind=engine)
+
+app.include_router(customer_router)
+app.include_router(call_session_router)
+app.include_router(transcript_router)
+app.include_router(appointment_router)
+app.include_router(property_router)
 
 # app.include_router(stt)
 

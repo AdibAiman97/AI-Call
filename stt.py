@@ -50,48 +50,49 @@ class AudioBuffer:
         self.buffer = deque()
         self.finished = False
         self.lock = threading.Lock()
-    
+
     def add_chunk(self, chunk: bytes):
         with self.lock:
             if not self.finished:
                 self.buffer.append(chunk)
-    
+
     def get_chunk(self) -> Optional[bytes]:
         with self.lock:
             if self.buffer:
                 return self.buffer.popleft()
             return None
-    
+
     def finish(self):
         with self.lock:
             self.finished = True
-    
+
     def is_finished(self) -> bool:
         with self.lock:
             return self.finished and len(self.buffer) == 0
 
+
 class TranscriptManager:
     def __init__(self):
         self.final_transcript = ""  # Accumulated final results
-        self.current_interim = ""   # Current interim result
+        self.current_interim = ""  # Current interim result
         self.lock = threading.Lock()
-    
+
     def update_interim(self, interim_text: str):
         """Update the current interim result"""
         with self.lock:
             self.current_interim = interim_text
-    
+
     def add_final(self, final_text: str):
         """Add final text to the accumulated transcript"""
         with self.lock:
             self.final_transcript += final_text + " "
             self.current_interim = ""  # Clear interim when we get final
-    
+
     def get_display_text(self):
         """Get the complete text for display (final + interim)"""
         with self.lock:
             return (self.final_transcript + self.current_interim).strip()
-    
+
     def get_final_only(self):
         """Get only the final transcript"""
         with self.lock:
@@ -329,6 +330,14 @@ async def speech_processor(
     # ✅ Properly await the executor task
     try:
         await loop.run_in_executor(None, process_recognition)
+
+    # Run both tasks concurrently
+    try:
+        # ASYNC: Run both async functions at the same time
+        # gather() allows async functions to run concurrently
+        await asyncio.gather(
+            audio_receiver(), speech_processor(), return_exceptions=True
+        )
     except Exception as e:
         error_message = str(e)
         print(f"Error in speech processor: {error_message}")
