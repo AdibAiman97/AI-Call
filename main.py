@@ -196,8 +196,8 @@ async def start_speech_session(ws: WebSocket, rag_sys, speech_client, config, st
         
         print("✅ Speech session cleanup complete")
 
-@app.websocket("/stt")
-async def rag_query_stream(ws: WebSocket, query: Optional[str] = None):
+@app.websocket("/stt/{call_session_id}")
+async def rag_query_stream(ws: WebSocket, query: Optional[str] = None, call_session_id: int):
     await ws.accept()
     await ws.send_text("✅ WebSocket connected to Google STT")
 
@@ -352,6 +352,24 @@ async def rag_query_stream(ws: WebSocket, query: Optional[str] = None):
                     "total_retries": retry_count,
                     "tts_timeouts": consecutive_tts_timeouts
                 }))
+
+               
+            if final_complete:
+                # Save to database
+                from database.connection import SessionLocal
+                from database.transcript_crud import TranscriptCRUD
+                from database.schemas import TranscriptCreate
+
+                db = SessionLocal()
+                try:
+                    transcript_data = TranscriptCreate(
+                        session_id=call_session_id,
+                        message=final_complete,
+                        message_by="System",
+                    )
+                    TranscriptCRUD.create_transcript(db, transcript=transcript_data)
+                finally:
+                    db.close()
         else:
             print("WebSocket already closed, skipping final message")
     except Exception as e:
