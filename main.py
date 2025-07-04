@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.websockets import WebSocket
 from pydantic import BaseModel
+from typing import Optional
 # Files
 from stt import AudioBuffer, TranscriptManager, audio_generator, audio_receiver, speech_processor
 from VertexRagSystem.rag_class import VertexRAGSystem, RAGConfig
@@ -197,7 +199,14 @@ async def start_speech_session(ws: WebSocket, rag_sys, speech_client, config, st
         print("✅ Speech session cleanup complete")
 
 @app.websocket("/stt/{call_session_id}")
-async def rag_query_stream(ws: WebSocket, query: Optional[str] = None, call_session_id: int):
+async def rag_query_stream(ws: WebSocket, query: Optional[str] = None, call_session_id: Optional[int] = None):
+
+    # Call Session ID in
+    # What is the phone number?
+
+    # If PN, get latest call session@summarized
+    # pass into RAG
+
     await ws.accept()
     await ws.send_text("✅ WebSocket connected to Google STT")
 
@@ -252,7 +261,7 @@ async def rag_query_stream(ws: WebSocket, query: Optional[str] = None, call_sess
                     print(f"❌ Failed to send restart notification: {send_error}")
                     break  # If we can't send to frontend, connection is likely broken
             
-            # Start speech session
+            # Start speech session WITH RAG 
             session_transcript_manager = await start_speech_session(
                 ws, rag_sys, speech_client, config, streaming_config, tts_state_manager
             )
