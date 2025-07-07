@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from database.models.transcript import Transcript
 from database.schemas import TranscriptCreate, TranscriptUpdate
 from typing import Optional
-
+from database.models.call_session import CallSession
 
 def create_session_message(
     db: Session,
@@ -13,17 +13,17 @@ def create_session_message(
     key_topics: Optional[str] = None,
 ):
     """Creates a new message within a call session."""
-    db_session = CallSession(
+    db_transcript = Transcript(
         session_id=session_id,
         message=message,
         message_by=message_by,
         summarized=summarized,
         key_topics=key_topics,
     )
-    db.add(db_session)
+    db.add(db_transcript)
     db.commit()
-    db.refresh(db_session)
-    return db_session
+    db.refresh(db_transcript)
+    return db_transcript
 
 
 def get_session_messages(db: Session, session_id: int, skip: int = 0, limit: int = 100):

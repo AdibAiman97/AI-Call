@@ -5,6 +5,9 @@ from collections import deque
 from typing import Optional
 from tts import TTSConfig, TTSStreamProcessor
 
+from database.connection import get_db
+from services.transcript_crud import (create_session_message)
+
 import json
 import asyncio
 import threading
@@ -98,6 +101,9 @@ class TranscriptManager:
         with self.lock:
             return self.final_transcript.strip()
 
+db_gen = get_db()
+db = next(db_gen)
+
 # ===============================================================
 
 # BLOCKING FUNCTION: This will run in a separate thread
@@ -165,7 +171,9 @@ async def speech_processor(
     speech, 
     ws, 
     rag_sys,
-    tts_state_manager=None):
+    tts_state_manager=None,
+    call_session_id=None,
+    ):
     """Process speech recognition with TTS state awareness"""
     
     loop = asyncio.get_running_loop()
@@ -203,8 +211,22 @@ async def speech_processor(
                         
                         if is_final:
                             transcript_manager.add_final(transcript)
-                            print(f"FINAL: {transcript}")
                             
+                            # Insert Transcript into DB for user
+                            print(f"FINAL: {transcript}")
+                            print(f"CALL SESSION ID: {call_session_id}")
+                            try: 
+                                create_session_message(
+                                    db,
+                                    session_id=call_session_id,
+                                    message=transcript,
+                                    message_by="User"
+                                )
+                            except Exception as e:
+                                print(f"Error inserting transcript into DB: {e}")
+                            finally:
+                                db_gen.close()
+
                             response_data = {
                                 "type": "final",
                                 "text": transcript,
@@ -225,6 +247,19 @@ async def speech_processor(
                                         print(f"Error consuming stream: {e}")
 
                                 async def handle_audio(audio_data, text):
+                                    # Insert Transcript into DB for AI per sentences.
+                                    try:
+                                        create_session_message(
+                                            db,
+                                            session_id=call_session_id,
+                                            message=text,
+                                            message_by="AI"
+                                        )
+                                    except Exception as e:
+                                        print(f"Error inserting transcript into DB: {e}")
+                                    finally:
+                                        db_gen.close()
+
                                     print(f"Generated audio for: {text}")
                                     try:
                                         if ws.application_state != 3:

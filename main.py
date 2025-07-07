@@ -96,7 +96,15 @@ async def startup_event():
         init_status["status"] = "failed"
         init_status["message"] = f"Init failed: {str(e)}"
 
-async def start_speech_session(ws: WebSocket, rag_sys, speech_client, config, streaming_config, tts_state_manager=None):
+async def start_speech_session(
+    ws: WebSocket, 
+    rag_sys, 
+    speech_client, 
+    config, 
+    streaming_config, 
+    tts_state_manager=None,
+    call_session_id=None,
+    ):
     """Start a single speech recognition session with proper task management"""
     from stt import TTSStateManager
     
@@ -128,6 +136,7 @@ async def start_speech_session(ws: WebSocket, rag_sys, speech_client, config, st
                 ws, 
                 rag_sys,
                 tts_state_manager,
+                call_session_id
             )
         )
         
@@ -263,7 +272,8 @@ async def rag_query_stream(ws: WebSocket, query: Optional[str] = None, call_sess
             
             # Start speech session WITH RAG 
             session_transcript_manager = await start_speech_session(
-                ws, rag_sys, speech_client, config, streaming_config, tts_state_manager
+                ws, rag_sys, speech_client, config, streaming_config, tts_state_manager,
+                call_session_id
             )
             
             # If we get here, session completed successfully
