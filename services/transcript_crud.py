@@ -13,7 +13,7 @@ def create_session_message(
     key_topics: Optional[str] = None,
 ):
     """Creates a new message within a call session."""
-    db_session = CallSession(
+    db_session = Transcript(
         session_id=session_id,
         message=message,
         message_by=message_by,
@@ -29,8 +29,8 @@ def create_session_message(
 def get_session_messages(db: Session, session_id: int, skip: int = 0, limit: int = 100):
     """Retrieves messages for a specific session."""
     return (
-        db.query(CallSession)
-        .filter(CallSession.session_id == session_id)
+        db.query(Transcript)
+        .filter(Transcript.session_id == session_id)
         .offset(skip)
         .limit(limit)
         .all()
@@ -39,7 +39,7 @@ def get_session_messages(db: Session, session_id: int, skip: int = 0, limit: int
 
 def update_session_summary(db: Session, session_id: int, summarized: str):
     """Updates the summarized field for all messages in a session."""
-    db.query(CallSession).filter(CallSession.session_id == session_id).update(
+    db.query(Transcript).filter(Transcript.session_id == session_id).update(
         {"summarized": summarized}
     )
     db.commit()
@@ -48,7 +48,7 @@ def update_session_summary(db: Session, session_id: int, summarized: str):
 
 def update_session_key_topics(db: Session, session_id: int, key_topics: str):
     """Updates the key_topics field for all messages in a session."""
-    db.query(CallSession).filter(CallSession.session_id == session_id).update(
+    db.query(Transcript).filter(Transcript.session_id == session_id).update(
         {"key_topics": key_topics}
     )
     db.commit()
@@ -56,4 +56,4 @@ def update_session_key_topics(db: Session, session_id: int, key_topics: str):
 
 
 def get_message_by_id(db: Session, message_id: int):
-    return db.query(CallSession).filter(CallSession.id == message_id).first()
+    return db.query(Transcript).filter(Transcript.id == message_id).first()
