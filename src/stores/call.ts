@@ -1,6 +1,6 @@
 // stores/call.ts
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { useChatStore } from '@/stores/chat'
 
 // Audio queue item interface
 interface AudioQueueItem {
@@ -33,7 +33,9 @@ export const useCallStore = defineStore('call', {
     currentPlayingText: '',
     
     // Configuration
-    url: 'localhost:8000/stt',
+    url: 'localhost:8000/stt/1',
+    // Phone number not needed. Profile is fetched to FE without input on Pipeline.
+
     sampleRate: 16000,
     
     // Shutdown timeout (in milliseconds)
@@ -64,10 +66,13 @@ export const useCallStore = defineStore('call', {
             
             // Handle different message types
             if (data.type === 'tts_audio') {
-              // Handle TTS audio response - add to queue
+              // USERS TEXT HERE
               console.log('🎵 Received TTS audio response with text:', data.text)
               console.log('🎵 Audio data length:', data.audio_data?.length || 'undefined')
               this.addToAudioQueue(data.audio_data, data.text)
+              
+              // Save AI response to chat history
+              this.saveToChatHistory('ai', data.text)
             } else if (data.type === 'interim') {
               // Handle interim STT results
               console.log('📝 Received interim transcript:', data.transcript || data.text)
@@ -79,11 +84,11 @@ export const useCallStore = defineStore('call', {
             } else if (data.type === 'final') {
               // Handle final STT results
               console.log('📝 Received final transcript:', data.transcript || data.text)
-              if (data.transcript) {
-                this.transcript = data.transcript
-              } else if (data.text) {
-                this.transcript = data.text
-              }
+              const finalTranscript = data.transcript || data.text
+              this.transcript = finalTranscript
+              
+              // Save user's final transcript to chat history
+              this.saveToChatHistory('user', finalTranscript)
             } else if (data.type === 'shutdown_complete') {
               // Backend confirms it's ready to close
               console.log('✅ Backend confirmed shutdown, closing connection')
@@ -92,6 +97,9 @@ export const useCallStore = defineStore('call', {
               // Handle final transcript before shutdown
               console.log('📝 Received final transcript before shutdown')
               this.transcript = data.transcript
+              
+              // Save final transcript to chat history
+              this.saveToChatHistory('user', data.transcript)
             } else {
               // Handle other message types
               console.log('❓ Received unknown message type:', data.type, data)
@@ -101,6 +109,9 @@ export const useCallStore = defineStore('call', {
             // If it's not JSON, treat as plain text (STT response)
             console.log('📝 Received non-JSON message (treating as transcript):', e.data)
             this.transcript = e.data
+            
+            // Save transcript to chat history
+            this.saveToChatHistory('user', e.data)
           }
         }
 
@@ -275,6 +286,7 @@ export const useCallStore = defineStore('call', {
         id
       })
       
+      // AI TEXT HERE
       console.log(`🎵 Added to queue: "${text.substring(0, 30)}..." (Queue length: ${this.audioQueue.length})`)
       
       // Start processing queue if not already playing
@@ -391,6 +403,18 @@ export const useCallStore = defineStore('call', {
       } catch (error) {
         console.error('🚫 Error playing audio:', error)
         throw error
+      }
+    },
+
+    // Save to chat history
+    saveToChatHistory(role: 'user' | 'ai', content: string) {
+      // Get the chat store instance
+      const chatStore = useChatStore()
+      
+      // Only save non-empty content
+      if (content && content.trim().length > 0) {
+        chatStore.addMessage(role, content.trim())
+        console.log(`💬 Saved to chat history [${role}]: "${content.substring(0, 30)}..."`)
       }
     }
   }

@@ -1,44 +1,42 @@
 <template>
-  <div class="d-flex flex-column align-center justify-center fill-height ga-6">
-    <div class="d-flex flex-column align-center justify-center">
-      <v-avatar size="120" class="bg-primary">
-        <span class="text-h3 text-background font-weight-bold">AI</span>
-      </v-avatar>
-      <h1 class="d-flex align-center justify-center pt-2">AI Agent</h1>
+  <div class="d-flex fill-height ga-2 w-100">
+    <div class="d-flex flex-column align-center justify-center fill-height ga-6 w-100">
+      <div class="d-flex flex-column align-center justify-center">
+        <v-avatar size="120" class="bg-primary">
+          <span class="text-h3 text-background font-weight-bold">AI</span>
+        </v-avatar>
+        <h1 class="d-flex align-center justify-center pt-2">AI Agent</h1>
+      </div>
+
+      <div class="d-flex align-center justify-center">
+        <AudioLines :size="50" />
+        <AudioLines :size="70" />
+        <AudioLines :size="50" />
+        <AudioLines :size="70" />
+        <AudioLines :size="50" />
+      </div>
+
+      <div class="mb-4">
+        <h1 class="d-flex align-center justify-center">{{ formattedTime }}</h1>
+        <p>Call Duration</p>
+      </div>
+
+      <div class="d-flex align-center justify-center ga-8">
+        <v-btn class="bg-foreground" size="70" rounded="circle">
+          <v-icon>
+            <volume2 />
+          </v-icon>
+        </v-btn>
+
+        <v-btn @click="endCall()" to="/call-summary" class="bg-error" size="70" rounded="circle">
+          <v-icon>
+            <phone color="white" />
+          </v-icon>
+        </v-btn>
+      </div>
     </div>
 
-    <div class="d-flex align-center justify-center">
-      <AudioLines :size="50" />
-      <AudioLines :size="70" />
-      <AudioLines :size="50" />
-      <AudioLines :size="70" />
-      <AudioLines :size="50" />
-    </div>
-
-    <div class="mb-4">
-      <h1 class="d-flex align-center justify-center">{{ formattedTime }}</h1>
-      <p>Call Duration</p>
-    </div>
-
-    <div class="d-flex align-center justify-center ga-8">
-      <v-btn class="bg-foreground" size="70" rounded="circle">
-        <v-icon>
-          <volume2 />
-        </v-icon>
-      </v-btn>
-
-      <v-btn
-        @click="endCall()"
-        to="/call-summary"
-        class="bg-error"
-        size="70"
-        rounded="circle"
-      >
-        <v-icon>
-          <phone color="white" />
-        </v-icon>
-      </v-btn>
-    </div>
+    <Chat />
   </div>
 </template>
 
@@ -86,7 +84,7 @@ onUnmounted(() => {
   if (timer) clearInterval(timer);
 });
 
-onMounted(()=> {
+onMounted(() => {
   startCall()
 })
 
