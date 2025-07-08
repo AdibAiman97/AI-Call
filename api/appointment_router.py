@@ -8,10 +8,9 @@ from database.schemas import AppointmentCreate, AppointmentUpdate, AppointmentRe
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
-
 @router.post("/", response_model=AppointmentResponse)
 def create_appointment(appointment: AppointmentCreate, db: Session = Depends(get_db)):
-    return AppointmentCRUD.create_appointment(db, appointment)
+    return AppointmentCRUD.create_appointment(db, appointment.dict())
 
 
 @router.get("/", response_model=List[AppointmentResponse])
@@ -21,7 +20,7 @@ def get_all_appointments(db: Session = Depends(get_db)):
 
 @router.get("/call-session/{call_session_id}", response_model=AppointmentResponse)
 def get_appointment_by_call_session(
-    call_session_id: str, db: Session = Depends(get_db)
+    call_session_id: int, db: Session = Depends(get_db)
 ):
     return AppointmentCRUD.get_appointment_by_call_session(db, call_session_id)
 
@@ -49,7 +48,7 @@ def get_appointment(appointment_id: int, db: Session = Depends(get_db)):
 def update_appointment(
     appointment_id: int, appointment: AppointmentUpdate, db: Session = Depends(get_db)
 ):
-    db_appointment = AppointmentCRUD.update_appointment(db, appointment_id, appointment)
+    db_appointment = AppointmentCRUD.update_appointment(db, appointment_id, appointment.dict())
     if db_appointment is None:
         raise HTTPException(status_code=404, detail="Appointment not found")
     return db_appointment
