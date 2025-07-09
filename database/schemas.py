@@ -63,16 +63,16 @@ class TranscriptResponse(BaseModel):
 
 class CallSessionBase(BaseModel):
     cust_id: str
-    start_time: str
-    end_time: str
-    duration_secs: int
-    positive: int
-    neutral: int
-    negative: int
-    key_words: str
-    summarized_content: str
-    customer_suggestions: str
-    admin_suggestions: str
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    duration_secs: Optional[int] = None
+    positive: Optional[int] = None
+    neutral: Optional[int] = None
+    negative: Optional[int] = None
+    key_words: Optional[str] = None
+    summarized_content: Optional[str] = None
+    customer_suggestions: Optional[str] = None
+    admin_suggestions: Optional[str] = None
 
 
 class CallSessionResponse(BaseModel):

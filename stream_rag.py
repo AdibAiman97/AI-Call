@@ -5,8 +5,9 @@ import json
 async def generate_stream(
     rag_sys,
     query,
+    call_summary: Optional[str] = None,
     include_sources: bool = True, 
-    top_k: Optional[int] = None
+    top_k: Optional[int] = None,
 ):
     try:
         print(f"📝 Query received: {query}")
@@ -30,7 +31,7 @@ async def generate_stream(
         )
 
         # Stream only the LLM response
-        async for chunk in rag_sys.generate_response_stream(query, context):
+        async for chunk in rag_sys.generate_response_stream(query, context, call_summary=call_summary):
             if chunk:
                 # print(f"LLM Response:{chunk}")
                 yield chunk

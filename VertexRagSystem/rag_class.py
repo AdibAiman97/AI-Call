@@ -310,7 +310,13 @@ class VertexRAGSystem:
             print(f"❌ LLM generation failed: {e}")
             return f"Error generating response: {str(e)}"
 
-    async def generate_response_stream(self, prompt: str, context: Optional[str] = None, use_memory: bool = True):
+    async def generate_response_stream(
+        self, 
+        prompt: str, 
+        context: Optional[str] = None, 
+        use_memory: bool = True,
+        call_summary: Optional[str] = None
+    ):
         """Generate streaming response with memory support"""
         if not self.llm_model:
             raise ValueError("LLM model not initialized")
@@ -326,6 +332,10 @@ class VertexRAGSystem:
         if conversation_history:
             prompt_parts.append(f"Conversation History:\n{conversation_history}\n")
         
+        if call_summary:
+            print(f"📝 Call summary received: {call_summary}")
+            prompt_parts.append(f"Call summary:\n{call_summary}\n")
+
         if context:
             prompt_parts.append(f"Context information:\n{context}\n")
         
