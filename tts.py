@@ -183,7 +183,7 @@ class TTSStreamProcessor:
                 
                 try:
                     audio_data = await self.processor.synthesize_text(remaining_text)
-                    print("audio data here: ", audio_data)
+                    # print("audio data here: ", audio_data)
                     if on_audio_ready:
                         await on_audio_ready(audio_data, remaining_text)
                 except Exception as e:
