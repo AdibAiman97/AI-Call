@@ -27,6 +27,7 @@ import uvicorn
 import asyncio
 import json
 import threading
+import os
 
 app = FastAPI()
 
@@ -69,33 +70,16 @@ async def startup_event():
 
         config = RAGConfig(
             project_id="voxis-ai",
-            location="us-central1"
+            location="us-central1",
+            mongodb_uri=os.getenv("MONGODB_ATLAS_CLUSTER_URI", ""),
+            mongodb_db_name=os.getenv("MONGODB_DB_NAME", "test_db"),
+            mongodb_collection_name=os.getenv("MONGODB_COLLECTION_NAME", "test_collection"),
+            mongodb_vector_index_name=os.getenv("MONGODB_VECTOR_INDEX_NAME", "test-index-1")
         )
 
         rag_sys = VertexRAGSystem(config)
 
         await rag_sys.initialize()
-
-        sample_docs = [
-            {
-                "id": "doc1",
-                "title": "Machine Learning Basics",
-                "content": "Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed. It involves algorithms that can identify patterns in data and make predictions or decisions based on those patterns."
-            },
-            {
-                "id": "doc2", 
-                "title": "Deep Learning Overview",
-                "content": "Deep learning is a subset of machine learning that uses artificial neural networks with multiple layers to model and understand complex patterns in data. It's particularly effective for tasks like image recognition, natural language processing, and speech recognition."
-            },
-            {
-                "id": "doc3",
-                "title": "RAG Systems",
-                "content": "Retrieval-Augmented Generation (RAG) combines information retrieval with text generation. It first retrieves relevant documents from a knowledge base, then uses those documents as context to generate more accurate and informed responses."
-            }
-        ]
-        rag_sys.add_documents(sample_docs)
-
-        await rag_sys.embed_documents()
 
         init_status["status"] = "completed"
         init_status["message"] = "RAG System initialized"

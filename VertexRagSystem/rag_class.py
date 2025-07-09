@@ -15,6 +15,14 @@ from langchain.memory import ConversationSummaryBufferMemory
 from langchain_google_vertexai import ChatVertexAI
 from langchain_core.messages import HumanMessage, AIMessage
 
+# MongoDB and LangChain imports for vector search
+from langchain_mongodb import MongoDBAtlasVectorSearch
+from pymongo import MongoClient
+from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
+from langchain_core.prompts import ChatPromptTemplate
+
 # Configuration
 @dataclass
 class RAGConfig:
@@ -28,6 +36,11 @@ class RAGConfig:
     # Memory configuration
     max_token_limit: int = 2000  # Token limit for memory buffer
     return_messages: bool = True  # Return messages format for memory
+    # MongoDB configuration
+    mongodb_uri: str = ""
+    mongodb_db_name: str = "test_db"
+    mongodb_collection_name: str = "test_collection"
+    mongodb_vector_index_name: str = "test-index-1"
 
 class VertexRAGSystem:
     """Complete RAG system using GCP Vertex AI with LangChain memory management"""
@@ -36,8 +49,11 @@ class VertexRAGSystem:
         self.config = config
         self.embedding_model = None
         self.llm_model = None
-        self.knowledge_base = []
-        self.embedded_docs = []
+        
+        # MongoDB components
+        self.mongodb_client = None
+        self.vector_store = None
+        self.google_embeddings = None
         
         # LangChain memory components
         self.chat_model = None  # For memory summarization
@@ -75,8 +91,49 @@ class VertexRAGSystem:
             )
             print(f"✅ ConversationSummaryBufferMemory initialized with token limit: {self.config.max_token_limit}")
             
+            # Initialize MongoDB connection and vector store
+            await self.initialize_mongodb()
+            
         except Exception as e:
             print(f"❌ Initialization failed: {e}")
+            raise
+    
+    async def initialize_mongodb(self):
+        """Initialize MongoDB connection and vector store"""
+        try:
+            # Initialize MongoDB client
+            self.mongodb_client = MongoClient(self.config.mongodb_uri)
+            
+            # Get Gemini API key from environment
+            import os
+            gemini_api_key = os.getenv("GEMINI_API_KEY")
+            if not gemini_api_key:
+                raise ValueError("GEMINI_API_KEY environment variable is required for embeddings")
+            
+            # Initialize Google embeddings for vector search
+            self.google_embeddings = GoogleGenerativeAIEmbeddings(
+                model="models/embedding-001",
+                google_api_key=gemini_api_key
+            )
+            
+            # Get MongoDB collection
+            mongodb_collection = self.mongodb_client[self.config.mongodb_db_name][self.config.mongodb_collection_name]
+            
+            # Initialize vector store
+            self.vector_store = MongoDBAtlasVectorSearch(
+                collection=mongodb_collection,
+                embedding=self.google_embeddings,
+                index_name=self.config.mongodb_vector_index_name,
+                relevance_score_fn="cosine",
+            )
+            
+            print(f"✅ MongoDB Atlas vector search initialized")
+            print(f"   Database: {self.config.mongodb_db_name}")
+            print(f"   Collection: {self.config.mongodb_collection_name}")
+            print(f"   Index: {self.config.mongodb_vector_index_name}")
+            
+        except Exception as e:
+            print(f"❌ MongoDB initialization failed: {e}")
             raise
     
     # MEMORY MANAGEMENT METHODS
@@ -149,109 +206,41 @@ class VertexRAGSystem:
         except Exception as e:
             return {"error": str(e), "memory_initialized": False}
 
-    # EMBEDDING FUNCTIONS
-    
-    def add_documents(self, documents: List[Dict[str, str]]):
-        """
-        Add documents to knowledge base
-        Expected format: [{"id": "doc1", "title": "Title", "content": "Content..."}]
-        """
-        self.knowledge_base.extend(documents)
-        print(f"📚 Added {len(documents)} documents to knowledge base")
-    
-    async def embed_documents(self, batch_size: int = 10):
-        """Generate embeddings for all documents in batches"""
-        if not self.embedding_model:
-            raise ValueError("Embedding model not initialized")
-        
-        if not self.knowledge_base:
-            raise ValueError("No documents in knowledge base")
-            
-        print(f"🔄 Embedding {len(self.knowledge_base)} documents...")
-        self.embedded_docs = []
-        
-        # Process in batches to avoid API limits
-        for i in range(0, len(self.knowledge_base), batch_size):
-            batch = self.knowledge_base[i:i + batch_size]
-            batch_texts = [doc["content"] for doc in batch]
-            
-            try:
-                # Get embeddings for batch
-                embeddings_response = self.embedding_model.get_embeddings(batch_texts)
-                
-                # Store embeddings with metadata
-                for j, embedding in enumerate(embeddings_response):
-                    doc_index = i + j
-                    self.embedded_docs.append({
-                        "doc_id": batch[j]["id"],
-                        "title": batch[j]["title"],
-                        "content": batch[j]["content"],
-                        "embedding": np.array(embedding.values)
-                    })
-                
-                print(f"  ✅ Embedded batch {i//batch_size + 1}/{(len(self.knowledge_base)-1)//batch_size + 1}")
-                
-            except Exception as e:
-                print(f"  ❌ Failed to embed batch starting at index {i}: {e}")
-                continue
-        
-        print(f"🎉 Successfully embedded {len(self.embedded_docs)} documents")
-    
-    async def embed_query(self, query: str) -> np.ndarray:
-        """Generate embedding for a single query"""
-        if not self.embedding_model:
-            raise ValueError("Embedding model not initialized")
-            
-        try:
-            embedding_response = self.embedding_model.get_embeddings([query])
-            return np.array(embedding_response[0].values)
-        except Exception as e:
-            print(f"❌ Failed to embed query: {e}")
-            raise
-    
-    def cosine_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
-        """Calculate cosine similarity between two vectors"""
-        dot_product = np.dot(vec1, vec2)
-        norm1 = np.linalg.norm(vec1)
-        norm2 = np.linalg.norm(vec2)
-        
-        if norm1 == 0 or norm2 == 0:
-            return 0.0
-            
-        return dot_product / (norm1 * norm2)
+    # MONGODB DOCUMENT RETRIEVAL FUNCTIONS
     
     async def retrieve_relevant_docs(self, query: str, top_k: Optional[int] = None) -> List[Dict]:
-        """Retrieve most relevant documents for a query"""
-        if not self.embedded_docs:
-            raise ValueError("No embedded documents available. Run embed_documents() first.")
+        """Retrieve most relevant documents for a query using MongoDB Atlas vector search"""
+        if not self.vector_store:
+            raise ValueError("MongoDB vector store not initialized. Run initialize() first.")
             
         top_k = top_k or self.config.top_k_docs
         
-        # Get query embedding
-        query_embedding = await self.embed_query(query)
-        
-        # Calculate similarities
-        similarities = []
-        for doc in self.embedded_docs:
-            similarity = self.cosine_similarity(query_embedding, doc["embedding"])
-            similarities.append((similarity, doc))
-        
-        # Sort by similarity (descending)
-        similarities.sort(key=lambda x: x[0], reverse=True)
-        
-        # Return top-k documents with their similarity scores
-        results = []
-        for i in range(min(top_k, len(similarities))):
-            similarity_score, doc = similarities[i]
-            results.append({
-                "similarity": similarity_score,
-                "doc_id": doc["doc_id"],
-                "title": doc["title"],
-                "content": doc["content"][:500] + "..." if len(doc["content"]) > 500 else doc["content"]
-            })
-        
-        print(f"🔍 Retrieved {len(results)} relevant documents for query: '{query[:50]}...'")
-        return results
+        try:
+            # Use MongoDB Atlas vector search to find similar documents
+            retriever = self.vector_store.as_retriever(
+                search_type="similarity",
+                search_kwargs={"k": top_k}
+            )
+            
+            # Retrieve documents
+            docs = retriever.invoke(query)
+            
+            # Format results to match expected structure
+            results = []
+            for i, doc in enumerate(docs):
+                results.append({
+                    "similarity": 1.0,  # MongoDB returns most relevant first
+                    "doc_id": doc.metadata.get("id", f"doc_{i}"),
+                    "title": doc.metadata.get("title", f"Document {i+1}"),
+                    "content": doc.page_content[:500] + "..." if len(doc.page_content) > 500 else doc.page_content
+                })
+            
+            print(f"🔍 Retrieved {len(results)} relevant documents from MongoDB for query: '{query[:50]}...'")
+            return results
+            
+        except Exception as e:
+            print(f"❌ Error retrieving documents from MongoDB: {e}")
+            return []
     
     # LLM FUNCTIONS
     
@@ -440,39 +429,8 @@ class VertexRAGSystem:
     
     # UTILITY FUNCTIONS
     
-    def save_embeddings(self, filepath: str):
-        """Save embeddings to file for faster startup"""
-        if not self.embedded_docs:
-            print("⚠️ No embeddings to save")
-            return
-            
-        # Convert numpy arrays to lists for JSON serialization
-        serializable_docs = []
-        for doc in self.embedded_docs:
-            doc_copy = doc.copy()
-            doc_copy["embedding"] = doc["embedding"].tolist()
-            serializable_docs.append(doc_copy)
-        
-        with open(filepath, 'w') as f:
-            json.dump(serializable_docs, f)
-        
-        print(f"💾 Saved {len(serializable_docs)} embeddings to {filepath}")
-    
-    def load_embeddings(self, filepath: str):
-        """Load embeddings from file"""
-        try:
-            with open(filepath, 'r') as f:
-                serializable_docs = json.load(f)
-            
-            # Convert lists back to numpy arrays
-            self.embedded_docs = []
-            for doc in serializable_docs:
-                doc["embedding"] = np.array(doc["embedding"])
-                self.embedded_docs.append(doc)
-            
-            print(f"📂 Loaded {len(self.embedded_docs)} embeddings from {filepath}")
-            
-        except FileNotFoundError:
-            print(f"⚠️ Embeddings file {filepath} not found")
-        except Exception as e:
-            print(f"❌ Failed to load embeddings: {e}")
+    def close_mongodb_connection(self):
+        """Close MongoDB connection"""
+        if self.mongodb_client:
+            self.mongodb_client.close()
+            print("🔐 MongoDB connection closed")
