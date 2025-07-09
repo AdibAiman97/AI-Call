@@ -412,7 +412,7 @@ async def rag_query_stream(ws: WebSocket, query: Optional[str] = None, call_sess
             if final_complete:
                 # Save to database
                 from database.connection import SessionLocal
-                from database.transcript_crud import TranscriptCRUD
+                from services.transcript_crud import TranscriptCRUD
                 from database.schemas import TranscriptCreate
 
                 db = SessionLocal()
