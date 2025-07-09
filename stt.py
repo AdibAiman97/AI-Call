@@ -173,6 +173,7 @@ async def speech_processor(
     rag_sys,
     tts_state_manager=None,
     call_session_id=None,
+    call_summary=None,
     ):
     """Process speech recognition with TTS state awareness"""
     
@@ -216,12 +217,15 @@ async def speech_processor(
                             print(f"FINAL: {transcript}")
                             print(f"CALL SESSION ID: {call_session_id}")
                             try: 
-                                create_session_message(
-                                    db,
-                                    session_id=call_session_id,
-                                    message=transcript,
-                                    message_by="User"
-                                )
+                                if (transcript.strip() != ""):
+                                    create_session_message(
+                                        db,
+                                        session_id=call_session_id,
+                                        message=transcript,
+                                        message_by="User"
+                                    )
+                                else:
+                                    print("🔍 No transcript to insert into DB")
                             except Exception as e:
                                 print(f"Error inserting transcript into DB: {e}")
                             finally:
@@ -239,7 +243,8 @@ async def speech_processor(
                                 
                                 async def consume_stream():
                                     try:
-                                        async for chunk in generate_stream(rag_sys, transcript):
+                                        
+                                        async for chunk in generate_stream(rag_sys, transcript, call_summary=call_summary):
                                             if ws.application_state == 3:
                                                 break
                                             yield chunk

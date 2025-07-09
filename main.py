@@ -10,12 +10,18 @@ from VertexRagSystem.rag_class import VertexRAGSystem, RAGConfig
 from google.cloud import speech
 from collections import deque
 
+
+
 from api.customer_router import router as customer_router
 from api.call_session_router import router as call_session_router
 from api.transcript_router import router as transcript_router
 from api.appointment_router import router as appointment_router
 from api.property_router import router as property_router
-from database.connection import engine, Base
+
+from database.connection import engine, Base, get_db
+from services.call_session import CallSessionService
+from database.schemas import CallSessionBase
+from datetime import datetime
 
 import uvicorn
 import asyncio
@@ -39,6 +45,8 @@ app.include_router(call_session_router)
 app.include_router(transcript_router)
 app.include_router(appointment_router)
 app.include_router(property_router)
+
+
 
 # app.include_router(stt)
 
@@ -104,6 +112,7 @@ async def start_speech_session(
     streaming_config, 
     tts_state_manager=None,
     call_session_id=None,
+    call_summary=None,
     ):
     """Start a single speech recognition session with proper task management"""
     from stt import TTSStateManager
@@ -136,7 +145,8 @@ async def start_speech_session(
                 ws, 
                 rag_sys,
                 tts_state_manager,
-                call_session_id
+                call_session_id,
+                call_summary
             )
         )
         
@@ -210,6 +220,32 @@ async def start_speech_session(
 @app.websocket("/stt/{call_session_id}")
 async def rag_query_stream(ws: WebSocket, query: Optional[str] = None, call_session_id: Optional[int] = None):
 
+    """ Get Call Session ID and Summary """
+    try:
+
+        db_gen = get_db()
+        db = next(db_gen)
+
+        service = CallSessionService(db)
+        call_session = service.get_by_id(call_session_id)
+        call_summary = call_session.summarized_content
+
+       
+    except Exception as e:
+        print(f"Error getting call session: {e}")
+
+
+    """ If no call session ID, create a new one """
+    if not call_session:
+        create_call_session = service.create(
+            CallSessionBase(
+                cust_id="0123334444",
+            )
+        )
+        call_session = service.get_by_id(create_call_session.id)
+        print(f"Call session ID: {call_session.id}")
+        print(f"Call session customer ID: {call_session.cust_id}")
+    
     # Call Session ID in
     # What is the phone number?
 
@@ -273,7 +309,7 @@ async def rag_query_stream(ws: WebSocket, query: Optional[str] = None, call_sess
             # Start speech session WITH RAG 
             session_transcript_manager = await start_speech_session(
                 ws, rag_sys, speech_client, config, streaming_config, tts_state_manager,
-                call_session_id
+                call_session_id, call_summary
             )
             
             # If we get here, session completed successfully
