@@ -319,9 +319,6 @@ def _determine_appointment_times(transcript: Transcript, call_session: CallSessi
     Returns:
         Tuple of (start_datetime, end_datetime)
     """
-    start_datetime = None
-    end_datetime = None
-    
     # Tier 1: Try to extract time from transcript text using NLU
     if transcript.message and transcript.message.strip():
         extracted_time = _extract_appointment_time_from_text(transcript.message, llm)
@@ -334,33 +331,24 @@ def _determine_appointment_times(transcript: Transcript, call_session: CallSessi
     # Tier 2: Use call_session timestamps with improved handling
     if call_session:
         try:
-            # Handle start_time - check if it's already a datetime object or string
-            if isinstance(call_session.start_time, datetime):
-                start_datetime = call_session.start_time
-            elif isinstance(call_session.start_time, str) and call_session.start_time.strip():
-                start_datetime = datetime.fromisoformat(call_session.start_time)
-            else:
-                raise ValueError("Invalid start_time format")
-                
-            # Handle end_time - check if it's already a datetime object or string
-            if isinstance(call_session.end_time, datetime):
-                end_datetime = call_session.end_time
-            elif isinstance(call_session.end_time, str) and call_session.end_time.strip():
-                end_datetime = datetime.fromisoformat(call_session.end_time)
-            else:
-                # If end_time is invalid but start_time is valid, use default duration
-                end_datetime = start_datetime + timedelta(hours=DEFAULT_APPOINTMENT_DURATION_HOURS)
-                
-            print(f"✅ Used call_session timestamps: {start_datetime} to {end_datetime}")
-            return start_datetime, end_datetime
+            start_datetime = _parse_datetime_flexible(call_session.start_time)
+            end_datetime = _parse_datetime_flexible(call_session.end_time)
             
-        except (ValueError, AttributeError, TypeError) as e:
+            if start_datetime:
+                # If end_time is invalid but start_time is valid, use default duration
+                if not end_datetime:
+                    end_datetime = start_datetime + timedelta(hours=DEFAULT_APPOINTMENT_DURATION_HOURS)
+                
+                print(f"✅ Used call_session timestamps: {start_datetime} to {end_datetime}")
+                return start_datetime, end_datetime
+            
+        except (ValueError, TypeError) as e:
             print(f"⚠️ Call session timestamp parsing failed: {str(e)}")
             # Fall through to Tier 3
     
     # Tier 3: Use transcript creation time as last resort
-    if transcript.created_at:
-        start_datetime = transcript.created_at
+    start_datetime = _parse_datetime_flexible(transcript.created_at)
+    if start_datetime:
         end_datetime = start_datetime + timedelta(hours=DEFAULT_APPOINTMENT_DURATION_HOURS)
         print(f"✅ Used transcript creation time as fallback: {start_datetime}")
     else:
@@ -370,6 +358,25 @@ def _determine_appointment_times(transcript: Transcript, call_session: CallSessi
         print(f"⚠️ Used current time as final fallback: {start_datetime}")
     
     return start_datetime, end_datetime
+
+def _parse_datetime_flexible(time_input: datetime | str | None) -> datetime | None:
+    """
+    Flexibly parse a datetime that could be a datetime object, an ISO string, or None.
+    
+    Args:
+        time_input: The datetime object, ISO string, or None
+        
+    Returns:
+        A datetime object or None
+    """
+    if isinstance(time_input, datetime):
+        return time_input
+    if isinstance(time_input, str) and time_input.strip():
+        try:
+            return datetime.fromisoformat(time_input.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    return None
 
 def _truncate_text(text: str | None, max_length: int) -> str:
     """
