@@ -27,6 +27,8 @@ import uvicorn
 import asyncio
 import json
 import threading
+import os
+from dotenv import load_dotenv
 
 app = FastAPI()
 
@@ -62,43 +64,37 @@ init_status = {"status": "not_started", "message" : ""}
 async def startup_event():
     """Init Rag System"""
     global rag_sys, init_status
-
+    
+    from config import DB_NAME, COLLECTION_NAME, ATLAS_VECTOR_SEARCH_INDEX_NAME, GCP_PROJECT_ID, GCP_LOCATION
+    
+    load_dotenv()
+    MONGO_DB_CONNECTION_STRING = os.getenv("MONGODB_URI") 
     try: 
         init_status["status"] = "Init...."
         init_status["message"] = "Starting Rag System...."
 
         config = RAGConfig(
-            project_id="voxis-ai",
-            location="us-central1"
+            project_id=GCP_PROJECT_ID,
+            location=GCP_LOCATION,
+            mongo_db_connection_string=MONGO_DB_CONNECTION_STRING,
+            db_name=DB_NAME,
+            collection_name=COLLECTION_NAME,
+            atlas_vector_search_index_name=ATLAS_VECTOR_SEARCH_INDEX_NAME
         )
 
         rag_sys = VertexRAGSystem(config)
 
         await rag_sys.initialize()
 
-        sample_docs = [
-            {
-                "id": "doc1",
-                "title": "Machine Learning Basics",
-                "content": "Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed. It involves algorithms that can identify patterns in data and make predictions or decisions based on those patterns."
-            },
-            {
-                "id": "doc2", 
-                "title": "Deep Learning Overview",
-                "content": "Deep learning is a subset of machine learning that uses artificial neural networks with multiple layers to model and understand complex patterns in data. It's particularly effective for tasks like image recognition, natural language processing, and speech recognition."
-            },
-            {
-                "id": "doc3",
-                "title": "RAG Systems",
-                "content": "Retrieval-Augmented Generation (RAG) combines information retrieval with text generation. It first retrieves relevant documents from a knowledge base, then uses those documents as context to generate more accurate and informed responses."
-            }
-        ]
-        rag_sys.add_documents(sample_docs)
-
-        await rag_sys.embed_documents()
+        # Test the connection and get stats
+        if rag_sys.test_connection():
+            stats = rag_sys.get_vector_store_stats()
+            print(f"📊 Vector store stats: {stats}")
+        else:
+            raise Exception("MongoDB connection test failed")
 
         init_status["status"] = "completed"
-        init_status["message"] = "RAG System initialized"
+        init_status["message"] = "RAG System initialized with MongoDB Atlas Vector Search"
 
     except Exception as e:
         init_status["status"] = "failed"
@@ -433,6 +429,171 @@ async def rag_query_stream(ws: WebSocket, query: Optional[str] = None, call_sess
     print(f"🏁 STT WebSocket session ended (total retries: {retry_count})")
 
 
+@app.get("/test-rag")
+async def test_rag_endpoint():
+    """Test endpoint to verify MongoDB RAG functionality"""
+    if not rag_sys:
+        return JSONResponse(
+            status_code=503, 
+            content={"error": "RAG system not initialized"}
+        )
+    
+    test_query = "what is the genetic syndrome for diabetes"
+    
+    try:
+        # Test the RAG query
+        result = await rag_sys.rag_query(
+            query=test_query,
+            include_sources=True,
+            use_memory=False  # Don't use memory for testing
+        )
+        
+        # Add system stats
+        result["system_stats"] = {
+            "vector_store_stats": rag_sys.get_vector_store_stats(),
+            "connection_test": rag_sys.test_connection(),
+            "config": {
+                "database": rag_sys.config.db_name,
+                "collection": rag_sys.config.collection_name,
+                "index_name": rag_sys.config.atlas_vector_search_index_name,
+                "top_k": rag_sys.config.top_k_docs
+            }
+        }
+        
+        return result
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": f"Test query failed: {str(e)}",
+                "query": test_query,
+                "system_stats": {
+                    "vector_store_stats": rag_sys.get_vector_store_stats() if rag_sys else None,
+                    "connection_test": rag_sys.test_connection() if rag_sys else False
+                }
+            }
+        )
+
+
+@app.get("/rag-status")
+async def rag_status():
+    """Get RAG system status and MongoDB connection info"""
+    if not rag_sys:
+        return {
+            "status": "not_initialized",
+            "message": "RAG system not initialized"
+        }
+    
+    return {
+        "status": "initialized",
+        "mongodb_connection": rag_sys.test_connection(),
+        "vector_store_stats": rag_sys.get_vector_store_stats(),
+        "config": {
+            "database": rag_sys.config.db_name,
+            "collection": rag_sys.config.collection_name,
+            "index_name": rag_sys.config.atlas_vector_search_index_name,
+            "embedding_model": rag_sys.config.embedding_model,
+            "llm_model": rag_sys.config.llm_model,
+            "top_k": rag_sys.config.top_k_docs
+        }
+    }
+
+
+@app.get("/check-documents")
+async def check_documents():
+    """Check what documents are actually in the MongoDB collection"""
+    if not rag_sys:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "RAG system not initialized"}
+        )
+    
+    try:
+        # Get collection stats
+        collection = rag_sys.mongodb_collection
+        
+        # Count total documents
+        total_docs = collection.count_documents({})
+        
+        # Get sample documents (first 5)
+        sample_docs = list(collection.find().limit(5))
+        
+        # Convert ObjectId to string for JSON serialization
+        for doc in sample_docs:
+            if '_id' in doc:
+                doc['_id'] = str(doc['_id'])
+        
+        # Check if documents have embeddings
+        docs_with_embeddings = collection.count_documents({"embedding": {"$exists": True}})
+        
+        # Get field names from a sample document
+        sample_fields = []
+        if sample_docs:
+            sample_fields = list(sample_docs[0].keys())
+        
+        return {
+            "total_documents": total_docs,
+            "documents_with_embeddings": docs_with_embeddings,
+            "sample_fields": sample_fields,
+            "sample_documents": sample_docs,
+            "database": rag_sys.config.db_name,
+            "collection": rag_sys.config.collection_name,
+            "message": "Collection is empty" if total_docs == 0 else f"Found {total_docs} documents"
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to check documents: {str(e)}"}
+        )
+
+
+@app.get("/test-retrieval/{query}")
+async def test_retrieval(query: str):
+    """Test document retrieval directly from MongoDB Atlas Vector Search"""
+    if not rag_sys:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "RAG system not initialized"}
+        )
+    
+    try:
+        print(f"🔍 Testing retrieval for query: {query}")
+        
+        # Test connection first
+        connection_ok = rag_sys.test_connection()
+        print(f"📶 MongoDB connection: {connection_ok}")
+        
+        # Get collection stats
+        stats = rag_sys.get_vector_store_stats()
+        print(f"📊 Collection stats: {stats}")
+        
+        # Test document retrieval
+        retrieved_docs = await rag_sys.retrieve_relevant_docs(query, top_k=5)
+        print(f"📄 Retrieved {len(retrieved_docs)} documents")
+        
+        return {
+            "query": query,
+            "connection_status": connection_ok,
+            "collection_stats": stats,
+            "retrieved_documents_count": len(retrieved_docs),
+            "retrieved_documents": retrieved_docs,
+            "retriever_config": {
+                "search_kwargs": rag_sys.retriever.search_kwargs if rag_sys.retriever else None,
+                "index_name": rag_sys.config.atlas_vector_search_index_name
+            }
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": f"Retrieval test failed: {str(e)}",
+                "query": query,
+                "connection_status": rag_sys.test_connection() if rag_sys else False
+            }
+        )
 
 
 # @app.post("/query")
