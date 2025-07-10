@@ -68,7 +68,7 @@ async def startup_event():
     from config import DB_NAME, COLLECTION_NAME, ATLAS_VECTOR_SEARCH_INDEX_NAME, GCP_PROJECT_ID, GCP_LOCATION
     
     load_dotenv()
-    MONGO_DB_CONNECTION_STRING = os.getenv("MONGODB_URI") 
+    MONGO_DB_CONNECTION_STRING = os.getenv("MONGO_DB") 
     try: 
         init_status["status"] = "Init...."
         init_status["message"] = "Starting Rag System...."

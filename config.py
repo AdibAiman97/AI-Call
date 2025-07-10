@@ -12,8 +12,8 @@ GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini
 # Create a .env file with: MONGO_DB="mongodb+srv://username:password@cluster.mongodb.net/?retryWrites=true&w=majority"
 MONGO_DB_CONNECTION_STRING = os.getenv("MONGO_DB", "")  # MongoDB Atlas connection string
 DB_NAME = "test_db"
-COLLECTION_NAME = "test_collection_pdf"
-ATLAS_VECTOR_SEARCH_INDEX_NAME = "test_index_pdf"
+COLLECTION_NAME = "test_collection"
+ATLAS_VECTOR_SEARCH_INDEX_NAME = "test-index-1"
 
 # GCP Configuration
 # Set GOOGLE_APPLICATION_CREDENTIALS environment variable to path of your service account JSON file

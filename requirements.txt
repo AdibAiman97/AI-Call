@@ -23,7 +23,7 @@ grpc-google-iam-v1==0.14.2
 grpcio==1.73.1
 h11==0.16.0
 idna==3.10
-numpy==2.2.6
+numpy
 packaging==24.2
 proto-plus==1.26.1
 protobuf==5.29.5
@@ -86,7 +86,7 @@ langchain-community==0.3.26
 langchain-core==0.3.66
 langchain-google-vertexai==2.0.26
 langchain-text-splitters==0.3.8
-langchain-mongodb==0.3.26
+langchain-mongodb==0.2.0
 langsmith==0.4.4
 pymongo==4.9.2
 lazy_loader==0.4
