@@ -9,11 +9,17 @@
       </div>
 
       <div class="d-flex align-center justify-center">
-        <AudioLines :size="50" />
-        <AudioLines :size="70" />
-        <AudioLines :size="50" />
-        <AudioLines :size="70" />
-        <AudioLines :size="50" />
+        <div class="soundwave-container">
+          <div 
+            v-for="(height, index) in waveHeights" 
+            :key="index" 
+            class="soundwave-bar"
+            :style="{ 
+              height: callStore.isPlayingAudio ? `${height}px` : '8px',
+              animationDelay: `${index * 0.1}s` 
+            }"
+          />
+        </div>
       </div>
 
       <div class="mb-4">
@@ -43,7 +49,7 @@
 <script setup lang="ts">
 import { AudioLines, Volume2, Phone } from "lucide-vue-next";
 import { useCallStore } from "@/stores/call";
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { onMounted, onUnmounted, ref, watch, computed, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
 
 const callStore = useCallStore();
@@ -51,6 +57,10 @@ const router = useRouter();
 
 const elapsedSeconds = ref(0);
 let timer = null as any;
+
+// Soundwave animation data
+const waveHeights = ref([30, 50, 70, 50, 30, 60, 40, 80, 35, 55]);
+let animationInterval: any = null;
 
 const formattedTime = computed(() => {
   const hours = Math.floor(elapsedSeconds.value / 3600);
@@ -98,8 +108,39 @@ watch(
   { immediate: true }
 );
 
+// Watch for AI speaking state changes
+watch(
+  () => callStore.isPlayingAudio,
+  (isPlaying) => {
+    if (isPlaying) {
+      startWaveAnimation();
+    } else {
+      stopWaveAnimation();
+    }
+  },
+  { immediate: true }
+);
+
+function startWaveAnimation() {
+  if (animationInterval) return;
+  
+  animationInterval = setInterval(() => {
+    waveHeights.value = waveHeights.value.map(() => 
+      Math.random() * 60 + 20 // Random height between 20-80px
+    );
+  }, 200);
+}
+
+function stopWaveAnimation() {
+  if (animationInterval) {
+    clearInterval(animationInterval);
+    animationInterval = null;
+  }
+}
+
 onUnmounted(() => {
   if (timer) clearInterval(timer);
+  stopWaveAnimation();
 });
 
 onMounted(() => {
@@ -140,3 +181,50 @@ onBeforeUnmount(() => {
   }
 });
 </script>
+
+<style scoped>
+.soundwave-container {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  height: 100px;
+  padding: 20px;
+}
+
+.soundwave-bar {
+  width: 6px;
+  background: linear-gradient(to top, rgb(var(--v-theme-primary)), rgb(var(--v-theme-primary)), rgba(var(--v-theme-primary), 0.7));
+  border-radius: 3px;
+  transition: height 0.2s ease-in-out;
+  box-shadow: 
+    0 2px 8px rgba(var(--v-theme-primary), 0.3),
+    0 0 20px rgba(var(--v-theme-primary), 0.1);
+  animation: pulse 1s ease-in-out infinite alternate;
+  transform-origin: bottom;
+}
+
+.soundwave-bar:nth-child(even) {
+  animation-direction: alternate-reverse;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 
+      0 2px 8px rgba(var(--v-theme-primary), 0.3),
+      0 0 20px rgba(var(--v-theme-primary), 0.1);
+    transform: scaleY(1);
+  }
+  100% {
+    box-shadow: 
+      0 4px 16px rgba(var(--v-theme-primary), 0.5),
+      0 0 30px rgba(var(--v-theme-primary), 0.3);
+    transform: scaleY(1.1);
+  }
+}
+
+/* Add a subtle glow effect when AI is speaking */
+.soundwave-container:has(.soundwave-bar[style*="80px"]) {
+  filter: drop-shadow(0 0 10px rgba(var(--v-theme-primary), 0.4));
+}
+</style>
