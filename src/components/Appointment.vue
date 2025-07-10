@@ -1,26 +1,14 @@
 <template>
   <!-- Calendar -->
   <div>
-    <h1 class="d-flex justify-space-between text-foreground align-center mb-2">
-      Appointment
-      <div class="d-flex ga-2">
-        <v-btn class="text-capitalize text-foreground">
-          <ListFilter :size="20" class="mr-2" />
-          Filter
-        </v-btn>
-        <v-btn class="bg-primary text-background text-capitalize">
-          <Plus :size="20" class="mr-2" />
-          Add Appointment
-        </v-btn>
-      </div>
-    </h1>
-    <p class="text-foreground mb-4">Manage your upcoming customer meetings</p>
     <!-- Loading state -->
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4"></v-progress-linear>
+
     <!-- Error state -->
     <v-alert v-if="error" type="error" class="mb-4" dismissible @click:close="error = null">
       {{ error }}
     </v-alert>
+    
     <v-calendar :interval-minutes="30" :interval-height="48" ref="calendar" v-model="value" :events="events"
       :view-mode="type" :weekdays="days">
     </v-calendar>

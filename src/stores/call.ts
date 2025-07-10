@@ -36,7 +36,7 @@ export const useCallStore = defineStore("call", {
     currentPlayingText: "",
 
     // Configuration
-    url: 'localhost:8000/stt/2',
+    url: "localhost:8000/stt/2",
     // Phone number not needed. Profile is fetched to FE without input on Pipeline.
 
     sampleRate: 16000,
@@ -68,15 +68,21 @@ export const useCallStore = defineStore("call", {
             console.log("🔍 Message type:", data.type);
 
             // Handle different message types
-            if (data.type === 'tts_audio') {
+            if (data.type === "tts_audio") {
               // USERS TEXT HERE
-              console.log('🎵 Received TTS audio response with text:', data.text)
-              console.log('🎵 Audio data length:', data.audio_data?.length || 'undefined')
-              this.addToAudioQueue(data.audio_data, data.text)
-              
+              console.log(
+                "🎵 Received TTS audio response with text:",
+                data.text
+              );
+              console.log(
+                "🎵 Audio data length:",
+                data.audio_data?.length || "undefined"
+              );
+              this.addToAudioQueue(data.audio_data, data.text);
+
               // Save AI response to chat history
-              this.saveToChatHistory('ai', data.text)
-            } else if (data.type === 'interim') {
+              this.saveToChatHistory("ai", data.text);
+            } else if (data.type === "interim") {
               // Handle interim STT results
               console.log(
                 "📝 Received interim transcript:",
@@ -89,34 +95,40 @@ export const useCallStore = defineStore("call", {
               }
             } else if (data.type === "final") {
               // Handle final STT results
-              console.log('📝 Received final transcript:', data.transcript || data.text)
-              const finalTranscript = data.transcript || data.text
-              this.transcript = finalTranscript
-              
+              console.log(
+                "📝 Received final transcript:",
+                data.transcript || data.text
+              );
+              const finalTranscript = data.transcript || data.text;
+              this.transcript = finalTranscript;
+
               // Save user's final transcript to chat history
-              this.saveToChatHistory('user', finalTranscript)
-            } else if (data.type === 'shutdown_complete') {
+              this.saveToChatHistory("user", finalTranscript);
+            } else if (data.type === "shutdown_complete") {
               // Backend confirms it's ready to close
               console.log("✅ Backend confirmed shutdown, closing connection");
               this.forceCloseConnection();
             } else if (data.type === "final_transcript") {
               // Handle final transcript before shutdown
-              console.log('📝 Received final transcript before shutdown')
-              this.transcript = data.transcript
-              
+              console.log("📝 Received final transcript before shutdown");
+              this.transcript = data.transcript;
+
               // Save final transcript to chat history
-              this.saveToChatHistory('user', data.transcript)
+              this.saveToChatHistory("user", data.transcript);
             } else {
               // Handle other message types
               console.log("❓ Received unknown message type:", data.type, data);
             }
           } catch (error) {
             // If it's not JSON, treat as plain text (STT response)
-            console.log('📝 Received non-JSON message (treating as transcript):', e.data)
-            this.transcript = e.data
-            
+            console.log(
+              "📝 Received non-JSON message (treating as transcript):",
+              e.data
+            );
+            this.transcript = e.data;
+
             // Save transcript to chat history
-            this.saveToChatHistory('user', e.data)
+            this.saveToChatHistory("user", e.data);
           }
         };
 
@@ -193,10 +205,10 @@ export const useCallStore = defineStore("call", {
         this.endTime.getTime() -
         (this.startTime?.getTime() || this.endTime.getTime());
       const durationSeconds = Math.floor(durationMs / 1000);
+      console.log("Duration: ", durationSeconds);
 
       const callSessionData = {
-        cust_id: "Chee Tat",
-        start_time: this.startTime?.toISOString() || new Date().toISOString(),
+        // start_time: this.startTime?.toISOString() || new Date().toISOString(),
         end_time: this.endTime?.toISOString() || new Date().toISOString(),
         duration_secs: durationSeconds,
         positive: 75,
@@ -238,8 +250,8 @@ export const useCallStore = defineStore("call", {
       }
 
       try {
-        const response = await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL}/call_session`,
+        const response = await axios.put(
+          `${import.meta.env.VITE_API_BASE_URL}/call_session/2`,
           callSessionData
         );
         this.callSessionId = response.data.id;
@@ -337,12 +349,16 @@ export const useCallStore = defineStore("call", {
       this.audioQueue.push({
         base64Audio,
         text,
-        id
-      })
-      
+        id,
+      });
+
       // AI TEXT HERE
-      console.log(`🎵 Added to queue: "${text.substring(0, 30)}..." (Queue length: ${this.audioQueue.length})`)
-      
+      console.log(
+        `🎵 Added to queue: "${text.substring(0, 30)}..." (Queue length: ${
+          this.audioQueue.length
+        })`
+      );
+
       // Start processing queue if not already playing
       if (!this.isPlayingAudio) {
         this.processAudioQueue();
@@ -466,14 +482,16 @@ export const useCallStore = defineStore("call", {
     },
 
     // Save to chat history
-    saveToChatHistory(role: 'user' | 'ai', content: string) {
+    saveToChatHistory(role: "user" | "ai", content: string) {
       // Get the chat store instance
-      const chatStore = useChatStore()
-      
+      const chatStore = useChatStore();
+
       // Only save non-empty content
       if (content && content.trim().length > 0) {
-        chatStore.addMessage(role, content.trim())
-        console.log(`💬 Saved to chat history [${role}]: "${content.substring(0, 30)}..."`)
+        chatStore.addMessage(role, content.trim());
+        console.log(
+          `💬 Saved to chat history [${role}]: "${content.substring(0, 30)}..."`
+        );
       }
     },
 
