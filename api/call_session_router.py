@@ -17,7 +17,7 @@ def get_call_sessions(customer_id: str = None, db: Session = Depends(get_db)):
 
 
 @router.get("/{call_session_id}", response_model=CallSessionBase)
-def get_call_session(call_session_id: int, db: Session = Depends(get_db)):
+def get_call_session(call_session_id: int = 1, db: Session = Depends(get_db)):
     service = CallSessionService(db)
     call_session = service.get_by_id(call_session_id)
     if not call_session:
