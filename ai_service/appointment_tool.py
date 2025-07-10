@@ -307,7 +307,7 @@ def _generate_appointment_title(transcript: Transcript) -> str:
     
     return title
 
-def _determine_appointment_times(transcript: Transcript, call_session: CallSession, llm: ChatGoogleGenerativeAI) -> tuple[datetime, datetime]:
+def _determine_appointment_times(transcript: Transcript, call_session: CallSession | None, llm: ChatGoogleGenerativeAI) -> tuple[datetime, datetime]:
     """
     Determine appointment times using tiered approach: transcript NLU -> call_session -> transcript.created_at
     
@@ -371,7 +371,7 @@ def _determine_appointment_times(transcript: Transcript, call_session: CallSessi
     
     return start_datetime, end_datetime
 
-def _truncate_text(text: str, max_length: int) -> str:
+def _truncate_text(text: str | None, max_length: int) -> str:
     """
     Truncate text to specified length with ellipsis if needed.
     
