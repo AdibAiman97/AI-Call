@@ -79,6 +79,15 @@ def create_appointment_from_transcript(transcript_id: int) -> str:
         
         start_datetime, end_datetime = _determine_appointment_times(transcript, call_session, llm)
         
+        # Check if explicit appointment time was found in transcript
+        if start_datetime is None or end_datetime is None:
+            return json.dumps({
+                "success": False,
+                "error": "No explicit appointment time found in transcript. Appointment not created.",
+                "transcript_id": transcript_id,
+                "message": "To create an appointment, the transcript must contain specific date and time information."
+            })
+        
         appointment_data = {
             "call_session_id": transcript.session_id,
             "title": title,
@@ -307,57 +316,31 @@ def _generate_appointment_title(transcript: Transcript) -> str:
     
     return title
 
-def _determine_appointment_times(transcript: Transcript, call_session: CallSession | None, llm: ChatGoogleGenerativeAI) -> tuple[datetime, datetime]:
+def _determine_appointment_times(transcript: Transcript, call_session: CallSession | None, llm: ChatGoogleGenerativeAI) -> tuple[datetime | None, datetime | None]:
     """
-    Determine appointment times using tiered approach: transcript NLU -> call_session -> transcript.created_at
+    Determine appointment times by extracting explicit time mentions from transcript text only.
+    No fallback to session times or creation timestamps.
     
     Args:
         transcript: The transcript object
-        call_session: The call session object (can be None)
+        call_session: The call session object (can be None) - UNUSED but kept for API compatibility
         llm: The LLM instance for time extraction
         
     Returns:
-        Tuple of (start_datetime, end_datetime)
+        Tuple of (start_datetime, end_datetime) if time found, (None, None) otherwise
     """
-    # Tier 1: Try to extract time from transcript text using NLU
+    # Only attempt to extract time from transcript text using NLU
     if transcript.message and transcript.message.strip():
         extracted_time = _extract_appointment_time_from_text(transcript.message, llm)
         if extracted_time:
             start_datetime = extracted_time
             end_datetime = start_datetime + timedelta(hours=DEFAULT_APPOINTMENT_DURATION_HOURS)
-            print(f"✅ Used NLU extracted time: {start_datetime}")
+            print(f"✅ Extracted appointment time from transcript: {start_datetime}")
             return start_datetime, end_datetime
     
-    # Tier 2: Use call_session timestamps with improved handling
-    if call_session:
-        try:
-            start_datetime = _parse_datetime_flexible(call_session.start_time)
-            end_datetime = _parse_datetime_flexible(call_session.end_time)
-            
-            if start_datetime:
-                # If end_time is invalid but start_time is valid, use default duration
-                if not end_datetime:
-                    end_datetime = start_datetime + timedelta(hours=DEFAULT_APPOINTMENT_DURATION_HOURS)
-                
-                print(f"✅ Used call_session timestamps: {start_datetime} to {end_datetime}")
-                return start_datetime, end_datetime
-            
-        except (ValueError, TypeError) as e:
-            print(f"⚠️ Call session timestamp parsing failed: {str(e)}")
-            # Fall through to Tier 3
-    
-    # Tier 3: Use transcript creation time as last resort
-    start_datetime = _parse_datetime_flexible(transcript.created_at)
-    if start_datetime:
-        end_datetime = start_datetime + timedelta(hours=DEFAULT_APPOINTMENT_DURATION_HOURS)
-        print(f"✅ Used transcript creation time as fallback: {start_datetime}")
-    else:
-        # Final fallback - use current time
-        start_datetime = datetime.now()
-        end_datetime = start_datetime + timedelta(hours=DEFAULT_APPOINTMENT_DURATION_HOURS)
-        print(f"⚠️ Used current time as final fallback: {start_datetime}")
-    
-    return start_datetime, end_datetime
+    # No explicit time found in transcript text
+    print(f"⚠️ No explicit appointment time found in transcript {transcript.id}")
+    return None, None
 
 def _parse_datetime_flexible(time_input: datetime | str | None) -> datetime | None:
     """
