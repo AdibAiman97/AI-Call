@@ -17,6 +17,7 @@ from api.call_session_router import router as call_session_router
 from api.transcript_router import router as transcript_router
 from api.appointment_router import router as appointment_router
 from api.property_router import router as property_router
+from api.pdf_router import router as pdf_router
 
 from database.connection import engine, Base, get_db
 from services.call_session import CallSessionService
@@ -47,6 +48,7 @@ app.include_router(call_session_router)
 app.include_router(transcript_router)
 app.include_router(appointment_router)
 app.include_router(property_router)
+app.include_router(pdf_router)
 
 
 
@@ -304,8 +306,14 @@ async def rag_query_stream(ws: WebSocket, query: Optional[str] = None, call_sess
             
             # Start speech session WITH RAG 
             session_transcript_manager = await start_speech_session(
-                ws, rag_sys, speech_client, config, streaming_config, tts_state_manager,
-                call_session_id, call_summary
+                ws, 
+                rag_sys, 
+                speech_client, 
+                config, 
+                streaming_config, 
+                tts_state_manager,
+                call_session_id, 
+                call_summary
             )
             
             # If we get here, session completed successfully
@@ -594,173 +602,3 @@ async def test_retrieval(query: str):
                 "connection_status": rag_sys.test_connection() if rag_sys else False
             }
         )
-
-
-# @app.post("/query")
-# async def rag_query(
-#     query: str,
-#     include_sources: bool = True,
-#     top_k: Optional[int] = None
-# ):
-#     """
-#     Perform complete RAG query: retrieve relevant documents and generate response
-    
-#     Args:
-#         query: The question or query string
-#         include_sources: Whether to include source documents in response
-#         top_k: Number of top documents to retrieve (optional)
-#     """
-#     if not rag_sys:
-#         raise HTTPException(status_code=503, detail="RAG system not initialized")
-    
-#     if not query.strip():
-#         raise HTTPException(status_code=400, detail="Query cannot be empty")
-    
-#     try:
-#         # Temporarily set top_k if provided
-#         original_top_k = rag_sys.config.top_k_docs
-#         if top_k:
-#             rag_sys.config.top_k_docs = top_k
-        
-#         result = await rag_sys.rag_query(query, include_sources)
-        
-#         # Restore original top_k
-#         rag_sys.config.top_k_docs = original_top_k
-        
-#         return result
-        
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Query processing failed: {str(e)}")
-
-# @app.post("/generate")
-# async def generate_response(
-#     prompt: str,
-#     context: Optional[str] = None
-# ):
-#     """
-#     Generate response using LLM with optional context
-    
-#     Args:
-#         prompt: The input prompt
-#         context: Optional context information
-#     """
-#     if not rag_sys:
-#         raise HTTPException(status_code=503, detail="RAG system not initialized")
-    
-#     if not prompt.strip():
-#         raise HTTPException(status_code=400, detail="Prompt cannot be empty")
-    
-#     try:
-#         response = await rag_sys.generate_response(prompt, context)
-#         return {
-#             "prompt": prompt,
-#             "context": context,
-#             "response": response
-#         }
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Response generation failed: {str(e)}")
-
-# @app.post("/retrieve")
-# async def retrieve_documents(
-#     query: str,
-#     top_k: int = 3
-# ):
-#     """
-#     Retrieve relevant documents without generating response
-    
-#     Args:
-#         query: The search query
-#         top_k: Number of top documents to retrieve
-#     """
-#     if not rag_sys:
-#         raise HTTPException(status_code=503, detail="RAG system not initialized")
-    
-#     if not query.strip():
-#         raise HTTPException(status_code=400, detail="Query cannot be empty")
-    
-#     if top_k <= 0:
-#         raise HTTPException(status_code=400, detail="top_k must be greater than 0")
-    
-#     try:
-#         docs = await rag_sys.retrieve_relevant_docs(query, top_k)
-#         return {
-#             "query": query,
-#             "top_k": top_k,
-#             "documents": docs,
-#             "count": len(docs)
-#         }
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Document retrieval failed: {str(e)}")
-
-# @app.post("/add_documents")
-# async def add_documents(documents: List[Dict[str, str]]):
-#     """
-#     Add documents to the knowledge base
-    
-#     Args:
-#         documents: List of documents with id, title, and content fields
-#     """
-#     if not rag_sys:
-#         raise HTTPException(status_code=503, detail="RAG system not initialized")
-    
-#     if not documents:
-#         raise HTTPException(status_code=400, detail="Documents list cannot be empty")
-    
-#     # Validate document format
-#     for i, doc in enumerate(documents):
-#         required_fields = ["id", "title", "content"]
-#         for field in required_fields:
-#             if field not in doc:
-#                 raise HTTPException(
-#                     status_code=400, 
-#                     detail=f"Document {i} missing required field: {field}"
-#                 )
-    
-#     try:
-#         rag_sys.add_documents(documents)
-#         return {
-#             "message": f"Successfully added {len(documents)} documents",
-#             "total_documents": len(rag_sys.knowledge_base),
-#             "status": "success"
-#         }
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Failed to add documents: {str(e)}")
-
-# @app.post("/embed_documents")
-# async def embed_documents(batch_size: int = 10):
-#     """
-#     Generate embeddings for all documents in the knowledge base
-    
-#     Args:
-#         batch_size: Number of documents to process in each batch
-#     """
-#     if not rag_sys:
-#         raise HTTPException(status_code=503, detail="RAG system not initialized")
-    
-#     if batch_size <= 0:
-#         raise HTTPException(status_code=400, detail="batch_size must be greater than 0")
-    
-#     try:
-#         await rag_sys.embed_documents(batch_size)
-#         return {
-#             "message": f"Successfully embedded {len(rag_sys.embedded_docs)} documents",
-#             "embedded_count": len(rag_sys.embedded_docs),
-#             "total_documents": len(rag_sys.knowledge_base),
-#             "status": "success"
-#         }
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Embedding generation failed: {str(e)}")
-
-# @app.exception_handler(404)
-# async def not_found_handler(request, exc):
-#     return JSONResponse(
-#         status_code=404,
-#         content={"detail": "Endpoint not found"}
-#     )
-
-# @app.exception_handler(500)
-# async def internal_error_handler(request, exc):
-#     return JSONResponse(
-#         status_code=500,
-#         content={"detail": "Internal server error"}
-#     )
