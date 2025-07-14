@@ -1,6 +1,6 @@
 import os
 import json
-import numpy as np
+import ssl
 from typing import List, Dict, Optional, Tuple
 import asyncio
 from dataclasses import dataclass
@@ -8,19 +8,26 @@ from dataclasses import dataclass
 # GCP Vertex AI imports
 import vertexai
 from vertexai.language_models import TextEmbeddingModel
-from vertexai.generative_models import GenerativeModel, Part, Content
 
-# LangChain imports for memory management
+# LangChain imports
 from langchain.memory import ConversationSummaryBufferMemory
-from langchain_google_vertexai import ChatVertexAI
+from langchain_google_vertexai import ChatVertexAI, VertexAIEmbeddings
 from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.prompts import ChatPromptTemplate
+from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents.stuff import create_stuff_documents_chain
+
+# MongoDB imports
+from langchain_mongodb import MongoDBAtlasVectorSearch
+from pymongo import MongoClient
+import certifi
 
 # Configuration
 @dataclass
 class RAGConfig:
     project_id: str = "your-gcp-project-id"
     location: str = "us-central1"  # or your preferred region
-    embedding_model: str = "text-embedding-004"
+    embedding_model: str = "text-embedding-005"
     llm_model: str = "gemini-2.0-flash-001"
     max_output_tokens: int = 1000
     temperature: float = 0.7
@@ -28,36 +35,90 @@ class RAGConfig:
     # Memory configuration
     max_token_limit: int = 2000  # Token limit for memory buffer
     return_messages: bool = True  # Return messages format for memory
+    # MongoDB configuration
+    mongo_db_connection_string: str = ""
+    db_name: str = "test_db"
+    collection_name: str = "test_collection_pdf"
+    atlas_vector_search_index_name: str = "test_index_pdf"
 
 class VertexRAGSystem:
-    """Complete RAG system using GCP Vertex AI with LangChain memory management"""
+    """Complete RAG system using MongoDB Atlas Vector Search with LangChain and Vertex AI"""
     
     def __init__(self, config: RAGConfig):
         self.config = config
-        self.embedding_model = None
         self.llm_model = None
-        self.knowledge_base = []
-        self.embedded_docs = []
+        self.embeddings = None
+        self.vector_store = None
+        self.retriever = None
+        self.chain = None
         
         # LangChain memory components
         self.chat_model = None  # For memory summarization
         self.memory = None
         
+        # MongoDB components
+        self.mongo_client = None
+        self.mongodb_collection = None
+        
     async def initialize(self):
-        """Initialize both embedding and LLM models along with memory"""
+        """Initialize MongoDB vector store, embedding model, LLM, and memory"""
         try:
             # Initialize Vertex AI
             vertexai.init(project=self.config.project_id, location=self.config.location)
+            print(f"✅ Vertex AI initialized for project: {self.config.project_id}")
             
-            # Initialize embedding model
-            self.embedding_model = TextEmbeddingModel.from_pretrained(self.config.embedding_model)
-            print(f"✅ Embedding model '{self.config.embedding_model}' initialized")
+            # Initialize MongoDB client
+            if not self.config.mongo_db_connection_string:
+                raise ValueError("MongoDB connection string not provided in config")
             
-            # Initialize LLM model (direct VertexAI for streaming)
-            self.llm_model = GenerativeModel(self.config.llm_model)
-            print(f"✅ LLM model '{self.config.llm_model}' initialized")
+            # Try secure connection first
+            try:
+                print("🔄 Attempting secure MongoDB connection...")
+                self.mongo_client = MongoClient(
+                    self.config.mongo_db_connection_string, 
+                    tlsCAFile=certifi.where()
+                )
+                # Test the connection immediately
+                self.mongo_client.admin.command('ping')
+                print("✅ Secure MongoDB connection established")
+            except Exception as ssl_error:
+                print(f"⚠️ Secure connection failed: {ssl_error}")
+                print("🔄 Trying simplified connection...")
+                try:
+                    # Try without explicit TLS settings (rely on connection string)
+                    self.mongo_client = MongoClient(self.config.mongo_db_connection_string)
+                    self.mongo_client.admin.command('ping')
+                    print("✅ MongoDB connection established (simplified)")
+                except Exception as fallback_error:
+                    print(f"❌ All connection attempts failed: {fallback_error}")
+                    raise Exception(f"MongoDB connection failed: {fallback_error}")
+            self.mongodb_collection = self.mongo_client[self.config.db_name][self.config.collection_name]
+            print(f"✅ MongoDB connected to database: {self.config.db_name}, collection: {self.config.collection_name}")
             
-            # Initialize LangChain ChatVertexAI for memory management
+            # Initialize Vertex AI embeddings through LangChain
+            self.embeddings = VertexAIEmbeddings(
+                model_name=self.config.embedding_model,
+                project=self.config.project_id,
+                location=self.config.location
+            )
+            print(f"✅ Vertex AI embeddings model '{self.config.embedding_model}' initialized through LangChain")
+            
+            # Initialize MongoDB Atlas Vector Search
+            self.vector_store = MongoDBAtlasVectorSearch(
+                collection=self.mongodb_collection,
+                embedding=self.embeddings,
+                index_name=self.config.atlas_vector_search_index_name,
+                relevance_score_fn="cosine"
+            )
+            print(f"✅ MongoDB Atlas Vector Search initialized with index: {self.config.atlas_vector_search_index_name}")
+            
+            # Create retriever
+            self.retriever = self.vector_store.as_retriever(
+                search_kwargs={"k": self.config.top_k_docs}
+            )
+            print(f"✅ Vector store retriever created with top_k={self.config.top_k_docs}")
+            
+            # Initialize LangChain ChatVertexAI for LLM and memory management
             self.chat_model = ChatVertexAI(
                 model_name=self.config.llm_model,
                 project=self.config.project_id,
@@ -65,7 +126,7 @@ class VertexRAGSystem:
                 temperature=self.config.temperature,
                 max_output_tokens=self.config.max_output_tokens
             )
-            print(f"✅ LangChain ChatVertexAI model initialized for memory")
+            print(f"✅ LangChain ChatVertexAI model '{self.config.llm_model}' initialized")
             
             # Initialize ConversationSummaryBufferMemory
             self.memory = ConversationSummaryBufferMemory(
@@ -75,8 +136,42 @@ class VertexRAGSystem:
             )
             print(f"✅ ConversationSummaryBufferMemory initialized with token limit: {self.config.max_token_limit}")
             
+            # Initialize RAG chain
+            await self._setup_rag_chain()
+            
         except Exception as e:
             print(f"❌ Initialization failed: {e}")
+            raise
+    
+    async def _setup_rag_chain(self):
+        """Setup the RAG chain with prompt template"""
+        try:
+            # Define system prompt
+            system_prompt = """
+            Use the given context to answer the question.
+            If you don't know the answer, say you don't know.
+
+            MUST NOT GENERATE ** or any other symbols other than period (.) and comma (,)
+            
+            Context documents: {context}
+            """
+            
+            # Create prompt template
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", system_prompt),
+                ("user", "{input}")
+            ])
+            
+            # Create document chain
+            document_chain = create_stuff_documents_chain(self.chat_model, prompt)
+            
+            # Create retrieval chain
+            self.chain = create_retrieval_chain(self.retriever, document_chain)
+            
+            print("✅ RAG chain initialized with retrieval and document processing")
+            
+        except Exception as e:
+            print(f"❌ Failed to setup RAG chain: {e}")
             raise
     
     # MEMORY MANAGEMENT METHODS
@@ -124,7 +219,7 @@ class VertexRAGSystem:
                 inputs={"input": human_input},
                 outputs={"output": ai_response}
             )
-            print(f"💾 Added conversation to memory")
+            # print(f"💾 Added conversation to memory")
         except Exception as e:
             print(f"⚠️ Error adding to memory: {e}")
     
@@ -149,111 +244,41 @@ class VertexRAGSystem:
         except Exception as e:
             return {"error": str(e), "memory_initialized": False}
 
-    # EMBEDDING FUNCTIONS
-    
-    def add_documents(self, documents: List[Dict[str, str]]):
-        """
-        Add documents to knowledge base
-        Expected format: [{"id": "doc1", "title": "Title", "content": "Content..."}]
-        """
-        self.knowledge_base.extend(documents)
-        print(f"📚 Added {len(documents)} documents to knowledge base")
-    
-    async def embed_documents(self, batch_size: int = 10):
-        """Generate embeddings for all documents in batches"""
-        if not self.embedding_model:
-            raise ValueError("Embedding model not initialized")
-        
-        if not self.knowledge_base:
-            raise ValueError("No documents in knowledge base")
-            
-        print(f"🔄 Embedding {len(self.knowledge_base)} documents...")
-        self.embedded_docs = []
-        
-        # Process in batches to avoid API limits
-        for i in range(0, len(self.knowledge_base), batch_size):
-            batch = self.knowledge_base[i:i + batch_size]
-            batch_texts = [doc["content"] for doc in batch]
-            
-            try:
-                # Get embeddings for batch
-                embeddings_response = self.embedding_model.get_embeddings(batch_texts)
-                
-                # Store embeddings with metadata
-                for j, embedding in enumerate(embeddings_response):
-                    doc_index = i + j
-                    self.embedded_docs.append({
-                        "doc_id": batch[j]["id"],
-                        "title": batch[j]["title"],
-                        "content": batch[j]["content"],
-                        "embedding": np.array(embedding.values)
-                    })
-                
-                print(f"  ✅ Embedded batch {i//batch_size + 1}/{(len(self.knowledge_base)-1)//batch_size + 1}")
-                
-            except Exception as e:
-                print(f"  ❌ Failed to embed batch starting at index {i}: {e}")
-                continue
-        
-        print(f"🎉 Successfully embedded {len(self.embedded_docs)} documents")
-    
-    async def embed_query(self, query: str) -> np.ndarray:
-        """Generate embedding for a single query"""
-        if not self.embedding_model:
-            raise ValueError("Embedding model not initialized")
-            
-        try:
-            embedding_response = self.embedding_model.get_embeddings([query])
-            return np.array(embedding_response[0].values)
-        except Exception as e:
-            print(f"❌ Failed to embed query: {e}")
-            raise
-    
-    def cosine_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
-        """Calculate cosine similarity between two vectors"""
-        dot_product = np.dot(vec1, vec2)
-        norm1 = np.linalg.norm(vec1)
-        norm2 = np.linalg.norm(vec2)
-        
-        if norm1 == 0 or norm2 == 0:
-            return 0.0
-            
-        return dot_product / (norm1 * norm2)
+    # RAG RETRIEVAL METHODS
     
     async def retrieve_relevant_docs(self, query: str, top_k: Optional[int] = None) -> List[Dict]:
-        """Retrieve most relevant documents for a query"""
-        if not self.embedded_docs:
-            raise ValueError("No embedded documents available. Run embed_documents() first.")
+        """Retrieve relevant documents using MongoDB Atlas Vector Search"""
+        if not self.retriever:
+            raise ValueError("Retriever not initialized. Run initialize() first.")
+        
+        try:
+            # Update retriever with custom top_k if provided
+            if top_k:
+                self.retriever.search_kwargs["k"] = top_k
             
-        top_k = top_k or self.config.top_k_docs
-        
-        # Get query embedding
-        query_embedding = await self.embed_query(query)
-        
-        # Calculate similarities
-        similarities = []
-        for doc in self.embedded_docs:
-            similarity = self.cosine_similarity(query_embedding, doc["embedding"])
-            similarities.append((similarity, doc))
-        
-        # Sort by similarity (descending)
-        similarities.sort(key=lambda x: x[0], reverse=True)
-        
-        # Return top-k documents with their similarity scores
-        results = []
-        for i in range(min(top_k, len(similarities))):
-            similarity_score, doc = similarities[i]
-            results.append({
-                "similarity": similarity_score,
-                "doc_id": doc["doc_id"],
-                "title": doc["title"],
-                "content": doc["content"][:500] + "..." if len(doc["content"]) > 500 else doc["content"]
-            })
-        
-        print(f"🔍 Retrieved {len(results)} relevant documents for query: '{query[:50]}...'")
-        return results
+            # Retrieve documents
+            docs = await asyncio.get_event_loop().run_in_executor(
+                None, self.retriever.invoke, query
+            )
+            
+            # Format results to match existing interface
+            results = []
+            for i, doc in enumerate(docs):
+                results.append({
+                    "doc_id": doc.metadata.get("_id", f"doc_{i}"),
+                    "title": doc.metadata.get("title", "Document"),
+                    "content": doc.page_content[:500] + "..." if len(doc.page_content) > 500 else doc.page_content,
+                    "similarity": 1.0  # MongoDB Atlas doesn't return scores by default
+                })
+            
+            print(f"🔍 Retrieved {len(results)} relevant documents for query: '{query[:50]}...'")
+            return results
+            
+        except Exception as e:
+            print(f"❌ Failed to retrieve documents: {e}")
+            return []
     
-    # LLM FUNCTIONS
+    # LLM GENERATION METHODS
     
     async def generate_response(
         self, 
@@ -261,51 +286,31 @@ class VertexRAGSystem:
         context: Optional[str] = None,
         use_memory: bool = True
     ) -> str:
-        """Generate response using LLM with optional context and conversation memory"""
-        if not self.llm_model:
-            raise ValueError("LLM model not initialized")
-        
-        # Get conversation history if memory is enabled
-        conversation_history = ""
-        if use_memory and self.memory:
-            conversation_history = self.get_conversation_history()
-        
-        # Prepare the full prompt with context and memory
-        prompt_parts = []
-        
-        if conversation_history:
-            prompt_parts.append(f"Conversation History:\n{conversation_history}\n")
-        
-        if context:
-            prompt_parts.append(f"Context information:\n{context}\n")
-        
-        prompt_parts.append(f"Current Question: {prompt}")
-        
-        if context:
-            prompt_parts.append("\nPlease answer the question based on the context provided above and the conversation history. If the context doesn't contain relevant information, please say so.")
-        
-        full_prompt = "\n".join(prompt_parts)
+        """Generate response using the RAG chain"""
+        if not self.chain:
+            raise ValueError("RAG chain not initialized")
         
         try:
-            response = await self.llm_model.generate_content_async(
-                full_prompt,
-                generation_config={
-                    "temperature": self.config.temperature,
-                    "max_output_tokens": self.config.max_output_tokens
-                }
+            # Add conversation history to prompt if memory is enabled
+            full_prompt = prompt
+            if use_memory and self.memory:
+                conversation_history = self.get_conversation_history()
+                if conversation_history:
+                    full_prompt = f"Conversation History:\n{conversation_history}\n\nCurrent Question: {prompt}"
+            
+            # Use the RAG chain to get response
+            result = await asyncio.get_event_loop().run_in_executor(
+                None, self.chain.invoke, {"input": full_prompt}
             )
             
-            if response.candidates and response.candidates[0].content:
-                ai_response = response.candidates[0].content.parts[0].text
-                
-                # Add to memory if enabled
-                if use_memory:
-                    self.add_to_memory(prompt, ai_response)
-                
-                return ai_response
-            else:
-                return "Sorry, I couldn't generate a response."
-                
+            ai_response = result.get("answer", "Sorry, I couldn't generate a response.")
+            
+            # Add to memory if enabled
+            if use_memory:
+                self.add_to_memory(prompt, ai_response)
+            
+            return ai_response
+            
         except Exception as e:
             print(f"❌ LLM generation failed: {e}")
             return f"Error generating response: {str(e)}"
@@ -317,112 +322,162 @@ class VertexRAGSystem:
         use_memory: bool = True,
         call_summary: Optional[str] = None
     ):
-        """Generate streaming response with memory support"""
-        if not self.llm_model:
+        """Generate streaming response with memory support and MongoDB document retrieval"""
+        if not self.chat_model:
             raise ValueError("LLM model not initialized")
 
-        # Get conversation history if memory is enabled
-        conversation_history = ""
-        if use_memory and self.memory:
-            conversation_history = self.get_conversation_history()
-
-        # Prepare the full prompt with context and memory
-        prompt_parts = []
-        
-        if conversation_history:
-            prompt_parts.append(f"Conversation History:\n{conversation_history}\n")
-        
-        if call_summary:
-            print(f"📝 Call summary received: {call_summary}")
-            prompt_parts.append(f"Call summary:\n{call_summary}\n")
-
-        if context:
-            prompt_parts.append(f"Context information:\n{context}\n")
-        
-        prompt_parts.append(f"Current Question: {prompt}")
-        
-        if context:
-            prompt_parts.append("""\n
-            Please answer the question based on the context provided above and the conversation history. If the context doesn't contain relevant information, please say so.
-            Always keep your responses short and precise.
-            """)
-        
-        full_prompt = "\n".join(prompt_parts)
-
         try:
-            # Collect the full response for memory storage
-            full_response = ""
+            # print(f"🔍 Starting document retrieval for query: '{prompt[:50]}...'")
             
-            # Stream content from the LLM
-            response = self.llm_model.generate_content(
-                full_prompt,
-                generation_config={
-                    "temperature": self.config.temperature,
-                    "max_output_tokens": self.config.max_output_tokens
-                },
-                stream=True
-            )
+            # Get conversation history if memory is enabled
+            conversation_history = ""
+            if use_memory and self.memory:
+                conversation_history = self.get_conversation_history()
+
+            # Step 1: Test MongoDB connection
+            if not self.test_connection():
+                print("❌ MongoDB connection failed, proceeding without document context")
+                retrieved_docs = []
+            else:
+                # print("✅ MongoDB connection verified")
                 
-            for chunk in response:
-                if chunk.candidates and chunk.candidates[0].content:
-                    text = chunk.candidates[0].content.parts[0].text
-                    full_response += text
-                    yield text
+                # Step 2: Retrieve relevant documents with detailed logging
+                retrieved_docs = []
+                try:
+                    if not self.retriever:
+                        print("❌ Retriever not initialized")
+                        retrieved_docs = []
+                    else:
+                        # print(f"📚 Retrieving documents from MongoDB collection: {self.config.collection_name}")
+                        
+                        # Check collection stats first
+                        doc_count = self.mongodb_collection.count_documents({})
+                        # print(f"📊 Total documents in collection: {doc_count}")
+                        
+                        if doc_count == 0:
+                            print("⚠️ Collection is empty - no documents to retrieve")
+                            retrieved_docs = []
+                        else:
+                            # Perform the actual retrieval
+                            docs = await asyncio.get_event_loop().run_in_executor(
+                                None, self.retriever.invoke, prompt
+                            )
+                            retrieved_docs = docs
+                            print(f"✅ Retrieved {len(retrieved_docs)} documents from MongoDB")
+                            
+                            # Log document details for debugging
+                            # for i, doc in enumerate(retrieved_docs[:3]):  # Log first 2 docs
+                                # print(f"📄 Doc {i+1}: {doc.page_content[:100]}...")
+                            
+                except Exception as retrieval_error:
+                    print(f"❌ Document retrieval failed: {retrieval_error}")
+                    retrieved_docs = []
+
+            # Step 3: Prepare context from retrieved documents
+            context_from_docs = ""
+            if retrieved_docs:
+                context_parts = []
+                for i, doc in enumerate(retrieved_docs):
+                    context_parts.append(f"Document {i+1}:\nContent: {doc.page_content}\n")
+                context_from_docs = "\n".join(context_parts)
+                # print(f"📝 Prepared context from {len(retrieved_docs)} documents")
+            else:
+                print("⚠️ No documents retrieved - proceeding without document context")
+
+            # Step 4: Build the complete prompt
+            prompt_parts = []
             
-            # Add complete conversation to memory after streaming is done
+            if conversation_history:
+                prompt_parts.append(f"Conversation History:\n{conversation_history}\n")
+                # print("💭 Added conversation history to prompt")
+            
+            if call_summary:
+                print(f"📋 Call summary received: {call_summary[:100]}...")
+                prompt_parts.append(f"Previous Call Summary:\n{call_summary}\n")
+
+            if context_from_docs:
+                prompt_parts.append(f"Retrieved Documents Context:\n{context_from_docs}\n")
+                # print("📚 Added document context to prompt")
+            
+            prompt_parts.append(f"Current Question: {prompt}")
+            
+            # Add instructions based on whether we have context
+            if context_from_docs:
+                prompt_parts.append("""\n
+                Instructions: Please answer the question based on the retrieved documents and conversation history above. 
+                If the documents don't contain relevant information for the question, clearly state that.
+                Keep your responses concise and accurate.
+                """)
+            else:
+                prompt_parts.append("""\n
+                Instructions: No relevant documents were found in the knowledge base for this query. 
+                Please provide a helpful response based on your general knowledge, but mention that no specific documents were available.
+                Keep your response concise.
+                """)
+            
+            full_prompt = "\n".join(prompt_parts)
+            # print(f"🤖 Sending prompt to LLM (length: {len(full_prompt)} chars)")
+
+            # Step 5: Stream the LLM response
+            full_response = ""
+            chunk_count = 0
+            
+            async for chunk in self.chat_model.astream(full_prompt):
+                if hasattr(chunk, 'content') and chunk.content:
+                    full_response += chunk.content
+                    chunk_count += 1
+                    yield chunk.content
+            
+            # print(f"✅ Streaming complete: {chunk_count} chunks, {len(full_response)} total chars")
+            
+            # Step 6: Add to memory if enabled
             if use_memory and full_response:
                 self.add_to_memory(prompt, full_response)
+                # print("💾 Response saved to conversation memory")
                 
         except Exception as e:
-            error_msg = f"\n[Error generating response: {str(e)}]"
+            error_msg = f"\n[Error in generate_response_stream: {str(e)}]"
+            print(f"❌ Stream generation error: {e}")
             yield error_msg
     
     async def rag_query(self, query: str, include_sources: bool = True, use_memory: bool = True) -> Dict:
-        """Complete RAG pipeline: retrieve + generate with memory support"""
+        """Complete RAG pipeline using LangChain retrieval chain"""
         try:
-            # Step 1: Retrieve relevant documents
-            relevant_docs = await self.retrieve_relevant_docs(query)
+            # Add conversation history to query if memory is enabled
+            full_query = query
+            if use_memory and self.memory:
+                conversation_history = self.get_conversation_history()
+                if conversation_history:
+                    full_query = f"Conversation History:\n{conversation_history}\n\nCurrent Question: {query}"
             
-            if not relevant_docs:
-                result = {
-                    "query": query,
-                    "answer": "I couldn't find any relevant information in the knowledge base.",
-                    "sources": [],
-                    "error": None
-                }
-                
-                # Still add to memory even if no docs found
-                if use_memory:
-                    self.add_to_memory(query, result["answer"])
-                
-                return result
+            # Use the RAG chain
+            result = await asyncio.get_event_loop().run_in_executor(
+                None, self.chain.invoke, {"input": full_query}
+            )
             
-            # Step 2: Prepare context from retrieved documents
-            context_parts = []
+            answer = result.get("answer", "I couldn't generate a response.")
+            
+            # Extract source information if requested
             sources = []
+            if include_sources and "context" in result:
+                for i, doc in enumerate(result["context"]):
+                    sources.append({
+                        "doc_id": doc.metadata.get("_id", f"doc_{i}"),
+                        "title": doc.metadata.get("title", "Document"),
+                        "similarity": 1.0
+                    })
             
-            for i, doc in enumerate(relevant_docs):
-                context_parts.append(f"Document {i+1} (ID: {doc['doc_id']}):\nTitle: {doc['title']}\nContent: {doc['content']}\n")
-                sources.append({
-                    "doc_id": doc["doc_id"],
-                    "title": doc["title"],
-                    "similarity": doc["similarity"]
-                })
+            # Add to memory if enabled
+            if use_memory:
+                self.add_to_memory(query, answer)
             
-            context = "\n".join(context_parts)
-            
-            # Step 3: Generate response using LLM with memory
-            answer = await self.generate_response(query, context, use_memory=use_memory)
-            
-            result = {
+            return {
                 "query": query,
                 "answer": answer,
-                "sources": sources if include_sources else [],
+                "sources": sources,
                 "error": None,
                 "memory_stats": self.get_memory_stats() if use_memory else None
             }
-            
-            return result
             
         except Exception as e:
             error_result = {
@@ -438,41 +493,31 @@ class VertexRAGSystem:
             
             return error_result
     
-    # UTILITY FUNCTIONS
+    # UTILITY METHODS
     
-    def save_embeddings(self, filepath: str):
-        """Save embeddings to file for faster startup"""
-        if not self.embedded_docs:
-            print("⚠️ No embeddings to save")
-            return
-            
-        # Convert numpy arrays to lists for JSON serialization
-        serializable_docs = []
-        for doc in self.embedded_docs:
-            doc_copy = doc.copy()
-            doc_copy["embedding"] = doc["embedding"].tolist()
-            serializable_docs.append(doc_copy)
-        
-        with open(filepath, 'w') as f:
-            json.dump(serializable_docs, f)
-        
-        print(f"💾 Saved {len(serializable_docs)} embeddings to {filepath}")
-    
-    def load_embeddings(self, filepath: str):
-        """Load embeddings from file"""
+    def get_vector_store_stats(self) -> Dict:
+        """Get statistics about the vector store"""
         try:
-            with open(filepath, 'r') as f:
-                serializable_docs = json.load(f)
+            if not self.mongodb_collection:
+                return {"error": "MongoDB collection not initialized"}
             
-            # Convert lists back to numpy arrays
-            self.embedded_docs = []
-            for doc in serializable_docs:
-                doc["embedding"] = np.array(doc["embedding"])
-                self.embedded_docs.append(doc)
-            
-            print(f"📂 Loaded {len(self.embedded_docs)} embeddings from {filepath}")
-            
-        except FileNotFoundError:
-            print(f"⚠️ Embeddings file {filepath} not found")
+            doc_count = self.mongodb_collection.count_documents({})
+            return {
+                "total_documents": doc_count,
+                "database": self.config.db_name,
+                "collection": self.config.collection_name,
+                "index_name": self.config.atlas_vector_search_index_name
+            }
         except Exception as e:
-            print(f"❌ Failed to load embeddings: {e}")
+            return {"error": str(e)}
+    
+    def test_connection(self) -> bool:
+        """Test MongoDB connection"""
+        try:
+            if self.mongo_client:
+                self.mongo_client.admin.command('ping')
+                return True
+            return False
+        except Exception as e:
+            print(f"❌ MongoDB connection test failed: {e}")
+            return False

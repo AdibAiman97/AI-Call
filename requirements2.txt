@@ -11,4 +11,5 @@ langchain-community
 # Additional dependencies for RAG system
 google-cloud-aiplatform
 numpy
-
+langchain_mongodb
+pymongo
