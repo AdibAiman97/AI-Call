@@ -2,8 +2,8 @@
   <div class="chat-container">
     <!-- Chat Header -->
     <div class="chat-header">
-      <v-icon class="me-2">mdi-robot</v-icon>
-      <span class="font-weight-medium">Voice Assistant</span>
+      <v-icon class="me-2 text-black">mdi-robot</v-icon>
+      <span class="font-weight-medium text-black">Voice Assistant</span>
       <v-spacer></v-spacer>
       <v-chip 
         :color="messages.length > 0 ? 'success' : 'grey'" 
@@ -164,7 +164,7 @@ onMounted(() => {
 
 .user-message {
   background-color: rgb(var(--v-theme-primary));
-  color: white;
+  color: black;
   border-radius: 18px 18px 4px 18px;
   padding: 12px 16px;
   margin-left: auto;

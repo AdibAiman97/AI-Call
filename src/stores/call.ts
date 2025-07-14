@@ -33,7 +33,7 @@ export const useCallStore = defineStore('call', {
     currentPlayingText: '',
     
     // Configuration
-    url: 'localhost:8000/stt/2',
+    url: 'localhost:8000/stt/1',
     // Phone number not needed. Profile is fetched to FE without input on Pipeline.
 
     sampleRate: 16000,
