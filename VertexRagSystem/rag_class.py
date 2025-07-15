@@ -16,6 +16,8 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents.stuff import create_stuff_documents_chain
+from langchain.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # MongoDB imports
 from langchain_mongodb import MongoDBAtlasVectorSearch
@@ -29,7 +31,7 @@ class RAGConfig:
     location: str = "us-central1"  # or your preferred region
     embedding_model: str = "text-embedding-005"
     llm_model: str = "gemini-2.0-flash-001"
-    max_output_tokens: int = 1000
+    max_output_tokens: int = 200
     temperature: float = 0.7
     top_k_docs: int = 3
     # Memory configuration
@@ -146,15 +148,35 @@ class VertexRAGSystem:
     async def _setup_rag_chain(self):
         """Setup the RAG chain with prompt template"""
         try:
-            # Define system prompt
+            # Define simplified system prompt for real estate sales assistant
             system_prompt = """
-            Use the given context to answer the question.
-            If you don't know the answer, say you don't know.
+            VERY IMPORTANT: 
+You are a voice assistant Gina for GAMUDA COVE sales gallery. A sales gallery located at  Bandar Gamuda Cove, Kuala Langat in Selangor.
 
-            MUST NOT GENERATE ** or any other symbols other than period (.) and comma (,)
-            
-            Context documents: {context}
-            """
+You are tasked with answering questions about the township development, specific property details, and booking appointments. 
+This is a voice conversation, so keep your responses short, like in a real conversation. Don't ramble for too long.
+Keep all your responses short and simple. Use casual language, phrases like "Umm...", "Well...", and "I mean" are preferred.
+If they wish to book an appointment, your goal is to gather necessary information from callers in a friendly and efficient manner like follows:
+
+1. Ask for their full name.
+2. Ask for what kind of property they are interested in. Semi-detached, Terrace, Bungalow, Apartments, etc.
+3. Ask what is the purpose of their purchase. For investment, for own stay, for family, etc.
+4. When talking about the property, talk about in order of the features, benefits, and pricing of the properties. 
+
+Key guidelines:
+- NEVER say "I don't have information" or "I don't know" about anything
+- For unclear questions, ask clarifying questions like "Do you mean..." or "Are you asking about..."
+- For any topic you're unsure about, always redirect professionally: "That's a great question! I'd love to discuss that when you visit our sales gallery. When would work best for you?"
+- Use simple, conversational language (like talking to a friend)
+- Never use symbols like asterisks, dashes, or brackets
+- Mirror the customer's speaking style - if they're formal, be formal; if casual, be casual
+- Always try to guide the conversation toward scheduling a viewing
+- Respond naturally, one topic at a time based on the conversation flow
+
+For first-time callers: Greet them warmly and introduce yourself as Gina from Gamuda Cove.
+
+Context documents: {context}
+"""
             
             # Create prompt template
             prompt = ChatPromptTemplate.from_messages([
@@ -246,6 +268,36 @@ class VertexRAGSystem:
 
     # RAG RETRIEVAL METHODS
     
+    def _should_retrieve_documents(self, query: str) -> bool:
+        """
+        Determine if we should retrieve documents based on the query type
+        Returns False for greetings and simple conversational queries
+        """
+        # Convert to lowercase for easier matching
+        query_lower = query.lower().strip()
+        
+        # Define patterns that DON'T need document retrieval
+        greeting_patterns = [
+            "hi", "hello", "hey", "good morning", "good afternoon", 
+            "good evening", "how are you", "what's up", "greetings"
+        ]
+        
+        simple_conversational = [
+            "thank you", "thanks", "okay", "ok", "yes", "no", 
+            "goodbye", "bye", "see you", "have a good day"
+        ]
+        
+        # Check if query is just a greeting or simple response
+        if query_lower in greeting_patterns + simple_conversational:
+            return False
+        
+        # Check if query is very short and likely conversational
+        if len(query.split()) <= 2 and any(pattern in query_lower for pattern in greeting_patterns):
+            return False
+        
+        # For everything else, retrieve documents
+        return True
+    
     async def retrieve_relevant_docs(self, query: str, top_k: Optional[int] = None) -> List[Dict]:
         """Retrieve relevant documents using MongoDB Atlas Vector Search"""
         if not self.retriever:
@@ -313,7 +365,7 @@ class VertexRAGSystem:
             
         except Exception as e:
             print(f"❌ LLM generation failed: {e}")
-            return f"Error generating response: {str(e)}"
+            return "That's a great question, and I'd love to discuss that in more detail when you visit our sales gallery. When would you like to set an appointment with us?"
 
     async def generate_response_stream(
         self, 
@@ -334,44 +386,42 @@ class VertexRAGSystem:
             if use_memory and self.memory:
                 conversation_history = self.get_conversation_history()
 
-            # Step 1: Test MongoDB connection
-            if not self.test_connection():
-                print("❌ MongoDB connection failed, proceeding without document context")
-                retrieved_docs = []
-            else:
-                # print("✅ MongoDB connection verified")
-                
-                # Step 2: Retrieve relevant documents with detailed logging
-                retrieved_docs = []
-                try:
-                    if not self.retriever:
-                        print("❌ Retriever not initialized")
-                        retrieved_docs = []
-                    else:
-                        # print(f"📚 Retrieving documents from MongoDB collection: {self.config.collection_name}")
-                        
-                        # Check collection stats first
-                        doc_count = self.mongodb_collection.count_documents({})
-                        # print(f"📊 Total documents in collection: {doc_count}")
-                        
-                        if doc_count == 0:
-                            print("⚠️ Collection is empty - no documents to retrieve")
+            # Check if we should retrieve documents
+            should_retrieve = self._should_retrieve_documents(prompt)
+            
+            if should_retrieve:
+                # Step 1: Test MongoDB connection
+                if not self.test_connection():
+                    print("❌ MongoDB connection failed, proceeding without document context")
+                    retrieved_docs = []
+                else:
+                    # Step 2: Retrieve relevant documents with detailed logging
+                    retrieved_docs = []
+                    try:
+                        if not self.retriever:
+                            print("❌ Retriever not initialized")
                             retrieved_docs = []
                         else:
-                            # Perform the actual retrieval
-                            docs = await asyncio.get_event_loop().run_in_executor(
-                                None, self.retriever.invoke, prompt
-                            )
-                            retrieved_docs = docs
-                            print(f"✅ Retrieved {len(retrieved_docs)} documents from MongoDB")
+                            # Check collection stats first
+                            doc_count = self.mongodb_collection.count_documents({})
                             
-                            # Log document details for debugging
-                            # for i, doc in enumerate(retrieved_docs[:3]):  # Log first 2 docs
-                                # print(f"📄 Doc {i+1}: {doc.page_content[:100]}...")
-                            
-                except Exception as retrieval_error:
-                    print(f"❌ Document retrieval failed: {retrieval_error}")
-                    retrieved_docs = []
+                            if doc_count == 0:
+                                print("⚠️ Collection is empty - no documents to retrieve")
+                                retrieved_docs = []
+                            else:
+                                # Perform the actual retrieval
+                                docs = await asyncio.get_event_loop().run_in_executor(
+                                    None, self.retriever.invoke, prompt
+                                )
+                                retrieved_docs = docs
+                                print(f"✅ Retrieved {len(retrieved_docs)} documents from MongoDB")
+                                
+                    except Exception as retrieval_error:
+                        print(f"❌ Document retrieval failed: {retrieval_error}")
+                        retrieved_docs = []
+            else:
+                print(f"📝 Skipping document retrieval for greeting/conversational query: '{prompt}'")
+                retrieved_docs = []
 
             # Step 3: Prepare context from retrieved documents
             context_from_docs = ""
@@ -380,41 +430,53 @@ class VertexRAGSystem:
                 for i, doc in enumerate(retrieved_docs):
                     context_parts.append(f"Document {i+1}:\nContent: {doc.page_content}\n")
                 context_from_docs = "\n".join(context_parts)
-                # print(f"📝 Prepared context from {len(retrieved_docs)} documents")
+                print(f"📝 Prepared context from {len(retrieved_docs)} documents")
             else:
-                print("⚠️ No documents retrieved - proceeding without document context")
+                if should_retrieve:
+                    print("⚠️ No documents retrieved - proceeding without document context")
+                # If we intentionally skipped retrieval for greetings, no warning needed
 
             # Step 4: Build the complete prompt
             prompt_parts = []
-            
+
             if conversation_history:
                 prompt_parts.append(f"Conversation History:\n{conversation_history}\n")
-                # print("💭 Added conversation history to prompt")
-            
+
             if call_summary:
                 print(f"📋 Call summary received: {call_summary[:100]}...")
                 prompt_parts.append(f"Previous Call Summary:\n{call_summary}\n")
 
             if context_from_docs:
                 prompt_parts.append(f"Retrieved Documents Context:\n{context_from_docs}\n")
-                # print("📚 Added document context to prompt")
-            
+
             prompt_parts.append(f"Current Question: {prompt}")
-            
-            # Add instructions based on whether we have context
-            if context_from_docs:
+
+            # Add simplified instructions based on query type
+            if should_retrieve and context_from_docs:
                 prompt_parts.append("""\n
-                Instructions: Please answer the question based on the retrieved documents and conversation history above. 
-                If the documents don't contain relevant information for the question, clearly state that.
-                Keep your responses concise and accurate.
+                RESPONSE INSTRUCTIONS: 
+                - Use simple, friendly language
+                - Never use symbols (no asterisks, dashes, brackets, etc.)
+                - Convert all numbers to words (e.g., "2214" becomes "two thousand two hundred and fourteen")
+                - Explain as such the person can explain within 3 sentences.
+                """)
+            elif should_retrieve and not context_from_docs:
+                prompt_parts.append("""\n
+                RESPONSE INSTRUCTIONS:
+                - Use simple, friendly language
+                - Never use symbols (no asterisks, dashes, brackets, etc.)
+                - Since no specific documents were found, use this professional redirect: "That's a great question! I'd love to discuss that when you visit our sales gallery. When would work best for you?"
                 """)
             else:
+                # For greetings and simple conversational queries
                 prompt_parts.append("""\n
-                Instructions: No relevant documents were found in the knowledge base for this query. 
-                Please provide a helpful response based on your general knowledge, but mention that no specific documents were available.
-                Keep your response concise.
+                RESPONSE INSTRUCTIONS:
+                - Use simple, friendly language
+                - Never use symbols (no asterisks, dashes, brackets, etc.)
+                - Keep response natural and conversational
+                - Focus on greeting the customer warmly and asking how you can help
                 """)
-            
+
             full_prompt = "\n".join(prompt_parts)
             # print(f"🤖 Sending prompt to LLM (length: {len(full_prompt)} chars)")
 
@@ -440,58 +502,7 @@ class VertexRAGSystem:
             print(f"❌ Stream generation error: {e}")
             yield error_msg
     
-    async def rag_query(self, query: str, include_sources: bool = True, use_memory: bool = True) -> Dict:
-        """Complete RAG pipeline using LangChain retrieval chain"""
-        try:
-            # Add conversation history to query if memory is enabled
-            full_query = query
-            if use_memory and self.memory:
-                conversation_history = self.get_conversation_history()
-                if conversation_history:
-                    full_query = f"Conversation History:\n{conversation_history}\n\nCurrent Question: {query}"
-            
-            # Use the RAG chain
-            result = await asyncio.get_event_loop().run_in_executor(
-                None, self.chain.invoke, {"input": full_query}
-            )
-            
-            answer = result.get("answer", "I couldn't generate a response.")
-            
-            # Extract source information if requested
-            sources = []
-            if include_sources and "context" in result:
-                for i, doc in enumerate(result["context"]):
-                    sources.append({
-                        "doc_id": doc.metadata.get("_id", f"doc_{i}"),
-                        "title": doc.metadata.get("title", "Document"),
-                        "similarity": 1.0
-                    })
-            
-            # Add to memory if enabled
-            if use_memory:
-                self.add_to_memory(query, answer)
-            
-            return {
-                "query": query,
-                "answer": answer,
-                "sources": sources,
-                "error": None,
-                "memory_stats": self.get_memory_stats() if use_memory else None
-            }
-            
-        except Exception as e:
-            error_result = {
-                "query": query,
-                "answer": "An error occurred while processing your query.",
-                "sources": [],
-                "error": str(e)
-            }
-            
-            # Add error to memory if enabled
-            if use_memory:
-                self.add_to_memory(query, error_result["answer"])
-            
-            return error_result
+    
     
     # UTILITY METHODS
     
@@ -521,3 +532,140 @@ class VertexRAGSystem:
         except Exception as e:
             print(f"❌ MongoDB connection test failed: {e}")
             return False
+
+    async def upload_pdf_to_mongodb(self, pdf_file_path: str) -> Dict:
+        """
+        Upload PDF to MongoDB with text embedding using Vertex AI
+        Uses the same embedding model as the main RAG system for consistency
+        """
+        try:
+            print(f"📄 Starting PDF upload process for: {pdf_file_path}")
+            
+            # Step 1: Verify that embeddings are initialized
+            if not self.embeddings:
+                raise ValueError("Vertex AI embeddings not initialized. Please run initialize() first.")
+            
+            print("🔧 Using existing Vertex AI embeddings...")
+            
+            # Step 2: Use the existing vector store (same embeddings, same collection)
+            # This ensures consistency with the main RAG system
+            if not self.vector_store:
+                raise ValueError("Vector store not initialized. Please run initialize() first.")
+            
+            print("✅ Using existing MongoDB vector store...")
+            
+            # Step 3: Initialize text splitter
+            print("📝 Initializing text splitter...")
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=1000,
+                chunk_overlap=100
+            )
+            
+            # Step 4: Load and split PDF
+            print(f"📖 Loading PDF from: {pdf_file_path}")
+            loader = PyPDFLoader(pdf_file_path)
+            docs = loader.load_and_split(text_splitter)
+            
+            if not docs:
+                return {
+                    "success": False,
+                    "message": "No content found in PDF",
+                    "documents_processed": 0
+                }
+            
+            print(f"📄 PDF split into {len(docs)} chunks")
+            
+            # Step 5: Add metadata to documents
+            for i, doc in enumerate(docs):
+                doc.metadata.update({
+                    "source_file": os.path.basename(pdf_file_path),
+                    "chunk_index": i,
+                    "total_chunks": len(docs),
+                    "upload_timestamp": asyncio.get_event_loop().time(),
+                    "embedding_model": f"vertex-ai-{self.config.embedding_model}",
+                    "document_type": "pdf"
+                })
+            
+            # Step 6: Add documents to vector store
+            print("🔄 Adding documents to MongoDB vector store...")
+            await asyncio.get_event_loop().run_in_executor(
+                None, self.vector_store.add_documents, docs
+            )
+            
+            # Step 7: The retriever automatically uses the updated vector store
+            print("✅ Documents added to existing vector store - no retriever update needed")
+            
+            # Step 8: Verify vector search index
+            try:
+                # Get embedding dimension from the model
+                embedding_dim = 768  # Default for most Vertex AI embedding models
+                if hasattr(self.embeddings, 'model_name'):
+                    # Different models might have different dimensions
+                    if 'gecko' in self.embeddings.model_name:
+                        embedding_dim = 768
+                    elif 'textembedding-gecko@003' in self.embeddings.model_name:
+                        embedding_dim = 768
+                    
+                self.vector_store.create_vector_search_index(dimensions=embedding_dim)
+                print("✅ Vector search index verified")
+            except Exception as index_error:
+                print(f"⚠️ Vector search index note: {index_error}")
+            
+            print(f"✅ PDF upload completed successfully!")
+            
+            return {
+                "success": True,
+                "message": f"PDF '{os.path.basename(pdf_file_path)}' uploaded successfully",
+                "documents_processed": len(docs),
+                "chunks_created": len(docs),
+                "embedding_model": f"vertex-ai-{self.config.embedding_model}",
+                "vector_store_stats": self.get_vector_store_stats()
+            }
+            
+        except Exception as e:
+            error_msg = f"PDF upload failed: {str(e)}"
+            print(f"❌ {error_msg}")
+            return {
+                "success": False,
+                "message": error_msg,
+                "documents_processed": 0,
+                "error": str(e)
+            }
+    
+    async def upload_pdf_from_bytes(self, pdf_bytes: bytes, filename: str) -> Dict:
+        """
+        Upload PDF from bytes data (useful for FastAPI file uploads)
+        Uses Vertex AI embeddings for consistency with the main RAG system
+        """
+        try:
+            # Step 1: Save bytes to temporary file
+            temp_dir = "/tmp"
+            os.makedirs(temp_dir, exist_ok=True)
+            temp_file_path = os.path.join(temp_dir, f"temp_{filename}")
+            
+            with open(temp_file_path, "wb") as temp_file:
+                temp_file.write(pdf_bytes)
+            
+            print(f"📄 Temporary PDF saved to: {temp_file_path}")
+            
+            # Step 2: Process the PDF using Vertex AI
+            result = await self.upload_pdf_to_mongodb(temp_file_path)
+            
+            # Step 3: Clean up temporary file
+            try:
+                os.remove(temp_file_path)
+                print("🧹 Temporary file cleaned up")
+            except Exception as cleanup_error:
+                print(f"⚠️ Cleanup warning: {cleanup_error}")
+            
+            return result
+            
+        except Exception as e:
+            error_msg = f"PDF upload from bytes failed: {str(e)}"
+            print(f"❌ {error_msg}")
+            return {
+                "success": False,
+                "message": error_msg,
+                "documents_processed": 0,
+                "error": str(e)
+            }

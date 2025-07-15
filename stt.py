@@ -238,7 +238,7 @@ async def speech_processor(
                                 "is_user_speaking": False,
                             }
 
-                            if not response_data["is_user_speaking"]: 
+                            if not response_data["is_user_speaking"] and transcript.strip() != "":
                                 print("🤖 Starting LLM generation...")
                                 
                                 async def consume_stream():
