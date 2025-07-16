@@ -11,6 +11,7 @@ declare module 'vue' {
     AppFooter: typeof import('./components/AppFooter.vue')['default']
     Appointment: typeof import('./components/Appointment.vue')['default']
     Chat: typeof import('./components/Chat.vue')['default']
+    DancingBlob: typeof import('./components/DancingBlob.vue')['default']
     DashboardCard: typeof import('./components/DashboardCard.vue')['default']
     DeepChat: typeof import('./components/DeepChat.vue')['default']
     Header: typeof import('./components/Header.vue')['default']

@@ -6,8 +6,12 @@
     </v-btn>
   </div>
 
-  <p class="text-foreground pb-2 mb-4">
-    Customer Name • 12 min • Today, 2:30 PM
+  <p class="text-foreground pb-2 mb-4" v-if="!loading && callSessionData">
+    {{ callStore.formatTime(callSessionData.duration_secs) }} •
+    {{ formatDateTime(callSessionData.start_time) }}
+  </p>
+  <p class="text-foreground pb-2 mb-4" v-else-if="loading">
+    Loading call information...
   </p>
 
   <!-- Summary Content -->
@@ -78,17 +82,74 @@
 </template>
 
 <script setup>
-const summaryList = ref([
-  "The customer expressed interest in purchasing a family home and outlined their preferred neighborhood, budget range, and essential features like 3 bedrooms and a backyard. The agent acknowledged their needs and suggested a few initial listings for consideration.",
-  "A prospective buyer called to inquire about a specific property listing they saw online, asking for details on its square footage, age, and recent renovations. The agent provided the requested information and offered to schedule a virtual tour or an in-person viewing.",
-  "The conversation revolved around a customer who was looking to sell their current property and buy a new one. The agent discussed market conditions in their area, provided an initial valuation estimate, and explained the process of listing their home while also helping them search for a new one.",
-  "A customer wanted to understand the financing options available for a property they were interested in. The agent provided an overview of loan types, connected them with a recommended mortgage broker, and explained the importance of pre-approval.",
-]);
+import { ref, onMounted } from "vue";
+import { useCallStore } from "../../stores/call";
 
-const customerNextSteps = ref([
-  "Review provided listings: Carefully go through any property listings or development brochures the agent sent. Make notes on what you like and dislike about each.",
-  "Get mortgage pre-approval: If you haven't already, actively pursue pre-approval for a mortgage. This clarifies your exact budget and shows agents you're a serious buyer.",
-  "Prepare for viewings: For properties that interest you, create a list of specific questions (e.g., utility costs, neighborhood specifics, reason for selling) to ask during a viewing.",
-  "Confirm viewing schedules: Promptly confirm your availability for any property viewings the agent proposes or request specific times that work for you.",
-]);
+const summaryList = ref([]);
+const customerNextSteps = ref([]);
+const callSessionData = ref(null);
+const loading = ref(true);
+
+const callStore = useCallStore();
+
+const fetchCallSessionData = async () => {
+  try {
+    const response = await fetch(
+      `${import.meta.env.VITE_API_BASE_URL}/call_session/${
+        callStore.callSessionId
+      }`
+    );
+
+    console.log("From Call Summary", response.data);
+    if (!response.ok) {
+      throw new Error("Failed to fetch call session data");
+    }
+    const data = await response.json();
+    callSessionData.value = data;
+
+    if (data.summarized_content) {
+      summaryList.value = data.summarized_content
+        .split("\n")
+        .filter((item) => item.trim());
+    }
+    if (data.customer_suggestions) {
+      customerNextSteps.value = data.customer_suggestions
+        .split("\n")
+        .filter((item) => item.trim());
+    }
+  } catch (error) {
+    console.error("Error fetching call session data:", error);
+    summaryList.value = [
+      "Unable to load call summary. Please try again later.",
+    ];
+    customerNextSteps.value = ["Please contact support for assistance."];
+  } finally {
+    loading.value = false;
+  }
+};
+
+const formatDateTime = (startTime) => {
+  if (!startTime) return "";
+  const date = new Date(startTime);
+  const options = {
+    weekday: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  };
+  return date.toLocaleString("en-US", options);
+};
+
+onMounted(() => {
+  // const callSessionId = route.query.id || route.params.id
+  // if (callSessionId) {
+  //   fetchCallSessionData(callSessionId)
+  // } else {
+  //   summaryList.value = ["No call session ID provided."]
+  //   customerNextSteps.value = ["Please return to the previous page and try again."]
+  //   loading.value = false
+  // }
+
+  fetchCallSessionData();
+});
 </script>

@@ -1,32 +1,33 @@
 <template>
   <div class="fill-height d-flex">
-      <v-row class="text-center mb-12 d-flex align-center">
-        <v-col cols="12" class="slide-up">
-          <h1 class="text-h2 text-md-h1 font-weight-bold mb-3">
-            <span class="text-gradient">AI-Powered</span> Call Assistant
-          </h1>
-          <p class="text-subtitle-1 text-md-h6 mx-auto" style="max-width: 800px;">
-            Connect with our intelligent AI agents and speak just like you would with a human.
-          </p>
-            <v-btn 
-              size="large" 
-              color="primary"
-              class="mt-12 text-primary gradient-wave-btn"
-              to="/on-call"
-              rounded
-              @click="callStore.startCall()"
-            >
-              Start Call Now
-            </v-btn>
-        </v-col>
-      </v-row>
+    <v-row class="text-center mb-12 d-flex align-center">
+      <v-col cols="12" class="slide-up">
+        <h1 class="text-h2 text-md-h1 font-weight-bold mb-3">
+          <span class="text-gradient">AI-Powered</span> Call Assistant
+        </h1>
+        <p class="text-subtitle-1 text-md-h6 mx-auto" style="max-width: 800px">
+          Connect with our intelligent AI agents and speak just like you would
+          with a human.
+        </p>
+        <v-btn
+          size="large"
+          color="primary"
+          class="mt-12 text-primary gradient-wave-btn"
+          to="/on-call"
+          rounded
+          @click="callStore.startCall()"
+        >
+          Start Call Now
+        </v-btn>
+      </v-col>
+    </v-row>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { useCallStore } from '@/stores/call'
+import { useCallStore } from "@/stores/call";
 
-const callStore = useCallStore()
+const callStore = useCallStore();
 </script>
 
 <style scoped>
@@ -43,7 +44,7 @@ const callStore = useCallStore()
   padding: 12px 24px;
   font-weight: 600;
   /* Your solid background */
-  background-color: #0f172a; 
+  background-color: #0f172a;
   border: 2px solid transparent;
   border-radius: 8px;
   cursor: pointer;
@@ -66,7 +67,7 @@ const callStore = useCallStore()
 }
 
 .gradient-wave-btn::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   border-radius: 10px;
@@ -74,9 +75,7 @@ const callStore = useCallStore()
   background: linear-gradient(90deg, #64ffda, #0ea5e9, #64ffda);
   background-size: 200%;
   animation: wave 3s linear infinite;
-  mask: 
-    linear-gradient(#fff 0 0) content-box, 
-    linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
   -webkit-mask-composite: destination-out;
   z-index: -1;

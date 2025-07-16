@@ -1,20 +1,14 @@
 <template>
   <!-- Calendar -->
   <div>
-    <h1 class="d-flex justify-space-between text-foreground align-center mb-2">
-      Appointment
-      <div class="d-flex ga-2">
-        <v-btn class="text-capitalize text-foreground">
-          <ListFilter :size="20" class="mr-2" />
-          Filter
-        </v-btn>
-        <v-btn class="bg-primary text-background text-capitalize">
-          <Plus :size="20" class="mr-2" />
-          Add Appointment
-        </v-btn>
-      </div>
-    </h1>
-    <p class="text-foreground mb-4">Manage your upcoming customer meetings</p>
+    <!-- Loading state -->
+    <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4"></v-progress-linear>
+
+    <!-- Error state -->
+    <v-alert v-if="error" type="error" class="mb-4" dismissible @click:close="error = null">
+      {{ error }}
+    </v-alert>
+    
     <v-calendar :interval-minutes="30" :interval-height="48" ref="calendar" v-model="value" :events="events"
       :view-mode="type" :weekdays="days">
     </v-calendar>
@@ -25,51 +19,57 @@
 import { useDate } from "vuetify";
 import { Plus, ListFilter } from "lucide-vue-next";
 
+// API Configuration
+const API_BASE_URL = 'http://localhost:8000';
+
 // Values
+const loading = ref(false);
+const error = ref(null);
 const type = ref("week");
 const days = ref([0, 1, 2, 3, 4, 5, 6]);
 const value = ref(new Date());
+// const events = ref([]);
 const events = ref(
   [
     {
-      "title": "Workshop",
-      "start": new Date("2025-06-09T02:00:00.000Z"),
+      "title": "WS2",
+      "start": new Date("2025-06-29T02:00:00.000Z"),
       "end": new Date("2025-06-09T10:00:00.000Z"),
       "color": "calendarYellow"
     },
     {
       "title": "Workshop",
-      "start": new Date("2025-06-13T01:00:00.000Z"),
+      "start": new Date("2025-07-04T01:00:00.000Z"),
       "end": new Date("2025-06-13T02:00:00.000Z"),
       "color": "calendarBlue"
     },
     {
       "title": "Workshop",
-      "start": new Date("2025-06-10T06:00:00.000Z"),
-      "end": new Date("2025-06-10T08:00:00.000Z"),
+      "start": new Date("2025-07-05T03:00:00.000Z"),
+      "end": new Date("2025-07-05T07:00:00.000Z"),
       "color": "calendarRed"
     },
     {
-      "title": "Workshop",
-      "start": new Date("2025-06-08T01:00:00.000Z"),
+      "title": "WS1",
+      "start": new Date("2025-06-30T01:00:00.000Z"),
       "end": new Date("2025-06-08T09:00:00.000Z"),
       "color": "calendarYellow"
     },
     {
       "title": "Holiday",
-      "start": new Date("2025-06-12T02:00:00.000Z"),
+      "start": new Date("2025-07-02T02:00:00.000Z"),
       "end": new Date("2025-06-12T10:00:00.000Z"),
       "color": "calendarBlue"
     },
     {
       "title": "Workshop",
-      "start": new Date("2025-06-13T03:00:00.000Z"),
+      "start": new Date("2025-07-01T03:00:00.000Z"),
       "end": new Date("2025-06-13T04:00:00.000Z"),
       "color": "calendarYellow"
     },
     {
       "title": "Holiday",
-      "start": new Date("2025-06-11T02:00:00.000Z"),
+      "start": new Date("2025-07-02T02:00:00.000Z"),
       "end": new Date("2025-06-11T10:00:00.000Z"),
       "color": "calendarBlue"
     }
@@ -166,9 +166,9 @@ function getEvents({ startWeek, endWeek }) {
 
   events.value = result;
 
-  console.log('results', result);
-  console.log(new Object(result[0].start))
-  console.log(typeof new Object(result[0].start))
+  console.log("results", result);
+  console.log(new Object(result[0].start));
+  console.log(typeof new Object(result[0].start));
 
   // result.map((each) => {
   //   console.log(
@@ -182,14 +182,85 @@ function getEvents({ startWeek, endWeek }) {
   // });
 }
 
-onMounted(() => {
+async function fetchAppointments(startDate, endDate) {
+  loading.value = true;
+  error.value = null;
+  
+  try {
+    // const startISO = startDate.toISOString();
+    // const endISO = endDate.toISOString();
+    console.log('start', new Date(startDate))
+    console.log('end', new Date(endDate))
+
+    const startTime = new Date(startDate).toISOString()
+    const endTime = new Date(endDate).toISOString()
+
+    console.log('start', startTime)
+    console.log('end', endTime)
+    
+    const response = await fetch(
+      `${API_BASE_URL}/appointments/date-range?start_date=${startTime}&end_date=${endTime}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const appointments = await response.json();
+    
+    // Transform API data to calendar event format
+    events.value = appointments.map(appointment => ({
+      id: appointment.id,
+      title: appointment.title,
+      start: new Date(appointment.start_time),
+      end: new Date(appointment.end_time),
+      color: colors[appointment.title] || 'calendarBlue',
+      callSessionId: appointment.call_session_id,
+      createdAt: appointment.created_at,
+      updatedAt: appointment.updated_at
+    }));
+
+    console.log('Fetched appointments:', events.value);
+    
+  } catch (err) {
+    console.error('Error fetching appointments:', err);
+    error.value = `Failed to load appointments: ${err.message}`;
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(async () => {
   const adapter = useDate();
-  const today = new Date();
-  const startWeek = adapter.startOfWeek(today);
-  const endWeek = adapter.endOfWeek(today);
+  const today = new Date().setHours(0,0,0,0);
+  
+  const startWeek = adapter.startOfWeek(today).setHours(0,0,0);
+  const endWeek = adapter.endOfWeek(today).setHours(23,59,59);
 
   // getEvents({ startWeek, endWeek });
+
+  // Initial load of appointments for current week
+  await fetchAppointments(startWeek, endWeek);
 });
+
+// Expose functions for potential external use
+defineExpose({
+  fetchAppointments,
+  // fetchAllAppointments,
+  refreshCalendar: () => {
+    const adapter = useDate();
+    const startWeek = adapter.startOfWeek(value.value);
+    const endWeek = adapter.endOfWeek(value.value);
+    fetchAppointments(startWeek, endWeek);
+  }
+});
+
 </script>
 
 <style scoped>
