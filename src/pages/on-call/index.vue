@@ -64,12 +64,12 @@ import {
   computed,
   onBeforeUnmount,
 } from "vue";
-import { useRouter } from "vue-router";
+// import { useRouter } from "vue-router";
 import { TresCanvas } from "@tresjs/core";
 import DancingBlob from "@/components/DancingBlob.vue";
 
 const callStore = useCallStore();
-const router = useRouter();
+// const router = useRouter();
 
 const elapsedSeconds = ref(0);
 let timer = null as any;
@@ -78,6 +78,7 @@ let timer = null as any;
 const analyser = ref<AnalyserNode | null>(null);
 const dataArray = ref<Uint8Array | null>(null);
 const audioContext = ref<AudioContext | null>(null);
+const audioSource = ref<MediaElementAudioSourceNode | AudioBufferSourceNode | MediaStreamAudioSourceNode | null>(null);
 
 const formattedTime = computed(() => {
   const hours = Math.floor(elapsedSeconds.value / 3600);
@@ -120,18 +121,112 @@ async function setupAudioAnalysis() {
     if (!analyser.value) {
       analyser.value = audioContext.value.createAnalyser();
       analyser.value.fftSize = 256;
+      analyser.value.smoothingTimeConstant = 0.8;
       const bufferLength = analyser.value.frequencyBinCount;
       dataArray.value = new Uint8Array(bufferLength);
     }
 
-    // Connect to audio stream if available
-    if (callStore.isPlayingAudio && audioContext.value.state === "suspended") {
+    // Resume audio context if suspended
+    if (audioContext.value.state === "suspended") {
       await audioContext.value.resume();
     }
+
+    // Try to connect to any existing audio elements
+    connectToAudioElements();
   } catch (error) {
     console.error("Error setting up audio analysis:", error);
   }
 }
+
+// Connect analyser to actual audio elements being played
+function connectToAudioElements() {
+  try {
+    if (!audioContext.value || !analyser.value) return;
+
+    // Find any audio elements that might be playing TTS
+    const audioElements = document.querySelectorAll('audio');
+    
+    audioElements.forEach((audio) => {
+      if (!audio.paused && audio.currentTime > 0) {
+        // This audio element is playing, connect it to our analyser
+        if (!audioSource.value) {
+          audioSource.value = audioContext.value!.createMediaElementSource(audio);
+          audioSource.value.connect(analyser.value!);
+          audioSource.value.connect(audioContext.value!.destination);
+          console.log("✅ Connected audio analysis to playing audio element");
+        }
+      }
+    });
+
+    // Also try to connect to the default audio output
+    if (!audioSource.value) {
+      // If no audio elements found, try to get user media for analysis
+      // This is a fallback for when audio is played through other means
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then((stream) => {
+          if (audioContext.value && analyser.value && !audioSource.value) {
+            const mediaStreamSource = audioContext.value.createMediaStreamSource(stream);
+            audioSource.value = mediaStreamSource;
+            mediaStreamSource.connect(analyser.value);
+            console.log("✅ Connected audio analysis to media stream");
+          }
+        })
+        .catch((error) => {
+          console.log("⚠️ Could not connect to audio stream:", error.message);
+        });
+    }
+  } catch (error) {
+    console.error("Error connecting to audio elements:", error);
+  }
+}
+
+// Handle Base64 PCM audio from Gemini Live API
+function processGeminiAudioData(base64Data: string) {
+  try {
+    if (!audioContext.value || !analyser.value) {
+      setupAudioAnalysis();
+      return;
+    }
+
+    // Decode Base64 to ArrayBuffer
+    const binaryString = atob(base64Data);
+    const arrayBuffer = new ArrayBuffer(binaryString.length);
+    const uint8Array = new Uint8Array(arrayBuffer);
+    
+    for (let i = 0; i < binaryString.length; i++) {
+      uint8Array[i] = binaryString.charCodeAt(i);
+    }
+
+    // Convert 16-bit PCM to AudioBuffer
+    // Gemini Live: 16-bit PCM, 24kHz, Mono
+    const audioBuffer = audioContext.value.createBuffer(1, uint8Array.length / 2, 24000);
+    const channelData = audioBuffer.getChannelData(0);
+    
+    // Convert 16-bit PCM bytes to float32 samples
+    for (let i = 0; i < channelData.length; i++) {
+      const sample = (uint8Array[i * 2] | (uint8Array[i * 2 + 1] << 8));
+      // Convert from 16-bit signed integer to float32 (-1 to 1)
+      channelData[i] = sample < 32768 ? sample / 32768 : (sample - 65536) / 32768;
+    }
+
+    // Create and play audio buffer
+    const bufferSource = audioContext.value.createBufferSource();
+    bufferSource.buffer = audioBuffer;
+    
+    // Connect to analyser for blob animation
+    bufferSource.connect(analyser.value);
+    bufferSource.connect(audioContext.value.destination);
+    
+    bufferSource.start();
+    console.log("✅ Playing Gemini Live audio with blob analysis");
+    
+  } catch (error) {
+    console.error("Error processing Gemini audio data:", error);
+  }
+}
+
+// Expose function to call store for audio processing
+(window as any).processGeminiAudioData = processGeminiAudioData;
 
 // Watch for AI speaking state changes
 watch(
@@ -139,6 +234,8 @@ watch(
   (isPlaying) => {
     if (isPlaying) {
       setupAudioAnalysis();
+      // Try to reconnect to audio elements when playback starts
+      setTimeout(connectToAudioElements, 100);
     }
   },
   { immediate: true }

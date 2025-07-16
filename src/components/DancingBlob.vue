@@ -20,7 +20,7 @@ const props = defineProps<{
 // blobColor = "default"  -> Uses original orange color (fallback)
 //
 // 👥 Team members: Just change "primary" to "default" if you prefer the original!
-const blobColor = "default"; // <-- Change this line to switch colors
+const blobColor = "default" as "primary" | "default"; // <-- Change this line to switch colors
 // ================================
 
 // composables
@@ -91,8 +91,9 @@ const colorConfigs = {
 const selectedColor = computed(() => {
   if (blobColor === "primary") {
     return colorConfigs.primary.value; // Access computed ref value directly
+  } else {
+    return colorConfigs.default; // Vector3 direct value
   }
-  return colorConfigs.default; // Vector3 direct value
 });
 
 // shader
