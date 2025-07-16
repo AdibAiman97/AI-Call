@@ -82,6 +82,7 @@ export default defineConfig({
       '.vue',
     ],
   },
+  assetsInclude: ['**/*.glsl'],
   server: {
     port: 3000,
   },
