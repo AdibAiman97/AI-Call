@@ -16,7 +16,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents.stuff import create_stuff_documents_chain
-from langchain.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # MongoDB imports
@@ -509,7 +509,7 @@ Context documents: {context}
     def get_vector_store_stats(self) -> Dict:
         """Get statistics about the vector store"""
         try:
-            if not self.mongodb_collection:
+            if self.mongodb_collection is None:
                 return {"error": "MongoDB collection not initialized"}
             
             doc_count = self.mongodb_collection.count_documents({})
@@ -525,7 +525,7 @@ Context documents: {context}
     def test_connection(self) -> bool:
         """Test MongoDB connection"""
         try:
-            if self.mongo_client:
+            if self.mongo_client is not None:
                 self.mongo_client.admin.command('ping')
                 return True
             return False

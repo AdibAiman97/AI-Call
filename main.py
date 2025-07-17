@@ -1,17 +1,17 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.websockets import WebSocket
+from fastapi.websockets import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from typing import Optional
-# Files
-from stt import AudioBuffer, TranscriptManager, audio_generator, audio_receiver, speech_processor
-from VertexRagSystem.rag_class import VertexRAGSystem, RAGConfig
-from google.cloud import speech
-from collections import deque
+import asyncio
+import json
+import base64
+import os
+import numpy as np
+from dotenv import load_dotenv
 
-
-
+# Import existing routers
 from api.customer_router import router as customer_router
 from api.call_session_router import router as call_session_router
 from api.transcript_router import router as transcript_router
@@ -19,17 +19,17 @@ from api.appointment_router import router as appointment_router
 from api.property_router import router as property_router
 from api.pdf_router import router as pdf_router
 
+# Import database components
 from database.connection import engine, Base, get_db
 from services.call_session import CallSessionService
 from database.schemas import CallSessionBase
 from datetime import datetime
 
-import uvicorn
-import asyncio
-import json
-import threading
-import os
-from dotenv import load_dotenv
+# Import RAG system
+from VertexRagSystem.rag_class import VertexRAGSystem, RAGConfig
+
+# Import the new Gemini Live system
+from gemini_live_websocket import GeminiLiveManager, GeminiLiveConfig, get_gemini_live_manager
 
 app = FastAPI()
 
@@ -43,6 +43,7 @@ app.add_middleware(
 
 Base.metadata.create_all(bind=engine)
 
+# Include existing routers
 app.include_router(customer_router)
 app.include_router(call_session_router)
 app.include_router(transcript_router)
@@ -50,32 +51,32 @@ app.include_router(appointment_router)
 app.include_router(property_router)
 app.include_router(pdf_router)
 
-
-
-# app.include_router(stt)
-
-# class QueryRequest(BaseModel):
-#     query: str
-    # include_sources: bool = True
-    # top_k: Optional[int] = None
-
+# Global variables
 rag_sys: Optional[VertexRAGSystem] = None
-init_status = {"status": "not_started", "message" : ""}
+gemini_live_manager: Optional[GeminiLiveManager] = None
+init_status = {"status": "not_started", "message": ""}
+
+# Note: Voice Activity Detection (VAD) is now handled by Gemini Live's built-in automatic activity detection
 
 @app.on_event("startup")
 async def startup_event():
-    """Init Rag System"""
-    global rag_sys, init_status
+    """Initialize RAG System and Gemini Live Manager"""
+    global rag_sys, gemini_live_manager, init_status
     
     from config import DB_NAME, COLLECTION_NAME, ATLAS_VECTOR_SEARCH_INDEX_NAME, GCP_PROJECT_ID, GCP_LOCATION
     
     load_dotenv()
-    MONGO_DB_CONNECTION_STRING = os.getenv("MONGO_DB") 
-    try: 
-        init_status["status"] = "Init...."
-        init_status["message"] = "Starting Rag System...."
-
-        config = RAGConfig(
+    
+    try:
+        init_status["status"] = "initializing"
+        init_status["message"] = "Starting RAG and Gemini Live systems..."
+        
+        # Initialize RAG System
+        print("🔄 Initializing RAG System...")
+        MONGO_DB_CONNECTION_STRING = os.getenv("MONGO_DB") 
+        
+        # Configure RAG System
+        rag_config = RAGConfig(
             project_id=GCP_PROJECT_ID,
             location=GCP_LOCATION,
             mongo_db_connection_string=MONGO_DB_CONNECTION_STRING,
@@ -84,379 +85,340 @@ async def startup_event():
             atlas_vector_search_index_name=ATLAS_VECTOR_SEARCH_INDEX_NAME
         )
 
-        rag_sys = VertexRAGSystem(config)
-
+        rag_sys = VertexRAGSystem(rag_config)
         await rag_sys.initialize()
 
-        # Test the connection and get stats
+        # Test RAG connection
         if rag_sys.test_connection():
             stats = rag_sys.get_vector_store_stats()
-            print(f"📊 Vector store stats: {stats}")
+            print(f"📊 RAG System - Vector store stats: {stats}")
         else:
-            raise Exception("MongoDB connection test failed")
+            raise Exception("RAG System - MongoDB connection test failed")
+        
+        # Initialize Gemini Live Manager
+        print("🔄 Initializing Gemini Live Manager...")
+        gemini_config = GeminiLiveConfig(
+            project_id=GCP_PROJECT_ID,
+            location=GCP_LOCATION,
+            model_name="gemini-2.0-flash-live-preview-04-09",  # Official Vertex AI Live model
+            voice_name="Aoede",  # Professional female voice
+            max_output_tokens=1000,
+            temperature=0.7
+        )
+        
+        gemini_live_manager = GeminiLiveManager(gemini_config)
 
         init_status["status"] = "completed"
-        init_status["message"] = "RAG System initialized with MongoDB Atlas Vector Search"
+        init_status["message"] = "RAG System and Gemini Live initialized successfully"
+        
+        print("✅ All systems initialized successfully")
 
     except Exception as e:
         init_status["status"] = "failed"
-        init_status["message"] = f"Init failed: {str(e)}"
-
-async def start_speech_session(
-    ws: WebSocket, 
-    rag_sys, 
-    speech_client, 
-    config, 
-    streaming_config, 
-    tts_state_manager=None,
-    call_session_id=None,
-    call_summary=None,
-    ):
-    """Start a single speech recognition session with proper task management"""
-    from stt import TTSStateManager
-    
-    audio_buffer = AudioBuffer()
-    transcript_manager = TranscriptManager()
-    
-    # Create or use provided TTS state manager
-    if tts_state_manager is None:
-        tts_state_manager = TTSStateManager()
-    
-    # Create tasks that we can cancel if needed
-    audio_task = None
-    speech_task = None
-    
-    try:
-        print("🔧 Creating audio receiver and speech processor tasks...")
-        
-        # Create tasks explicitly so we can manage them
-        audio_task = asyncio.create_task(
-            audio_receiver(ws, audio_buffer)
-        )
-        speech_task = asyncio.create_task(
-            speech_processor(
-                speech_client, 
-                streaming_config, 
-                transcript_manager, 
-                audio_buffer, 
-                speech, 
-                ws, 
-                rag_sys,
-                tts_state_manager,
-                call_session_id,
-                call_summary
-            )
-        )
-        
-        # Wait for tasks to complete - don't use return_exceptions so exceptions are raised
-        try:
-            results = await asyncio.gather(
-                audio_task,
-                speech_task
-            )
-            print("✅ Both audio receiver and speech processor completed successfully")
-            return transcript_manager
-            
-        except Exception as task_error:
-            error_message = str(task_error)
-            print(f"❌ Task failed with exception: {error_message}")
-            
-            # Check if it's a timeout error that we should retry
-            if ("Audio Timeout Error" in error_message or 
-                "400" in error_message or 
-                "Long duration elapsed without audio" in error_message):
-                print("🔄 Audio timeout detected in task - will retry session")
-                # This will trigger the finally block for cleanup
-                raise task_error
-            else:
-                print(f"💥 Non-timeout error in task: {error_message}")
-                raise task_error
-        
-    except asyncio.CancelledError:
-        print("🛑 Speech session was cancelled")
-        raise
-    except Exception as e:
-        print(f"❌ Exception in speech session: {e}")
-        raise
-        
-    finally:
-        print("🧹 Cleaning up speech session tasks...")
-        
-        # Always finish audio buffer first
-        audio_buffer.finish()
-        print("🛑 Audio buffer marked as finished")
-        
-        # Cancel any running tasks
-        tasks_to_cancel = []
-        if audio_task and not audio_task.done():
-            print("🛑 Cancelling audio receiver task...")
-            audio_task.cancel()
-            tasks_to_cancel.append(("audio_receiver", audio_task))
-        
-        if speech_task and not speech_task.done():
-            print("🛑 Cancelling speech processor task...")
-            speech_task.cancel()
-            tasks_to_cancel.append(("speech_processor", speech_task))
-        
-        # Wait for all cancelled tasks to complete
-        for task_name, task in tasks_to_cancel:
-            try:
-                await task
-                print(f"✅ {task_name} task cancelled successfully")
-            except asyncio.CancelledError:
-                print(f"✅ {task_name} task cancelled")
-            except Exception as e:
-                print(f"⚠️ {task_name} task cancellation error: {e}")
-        
-        # Clear TTS state if still active
-        if tts_state_manager and tts_state_manager.is_active():
-            print("🔇 Clearing TTS state during cleanup")
-            tts_state_manager.end_tts()
-        
-        print("✅ Speech session cleanup complete")
+        init_status["message"] = f"Initialization failed: {str(e)}"
+        print(f"❌ Initialization failed: {e}")
 
 @app.websocket("/stt/{call_session_id}")
-async def rag_query_stream(ws: WebSocket, query: Optional[str] = None, call_session_id: Optional[int] = None):
-
-    """ Get Call Session ID and Summary """
+async def gemini_live_websocket(websocket: WebSocket, call_session_id: int):
+    """
+    WebSocket endpoint for Gemini Live 2.5 Flash Preview native audio dialog
+    Replaces the previous STT/TTS pipeline with unified voice conversation
+    """
+    gemini_session = None
+    db = None
+    response_task = None
+    
+    # Note: Turn management is now handled by Gemini Live's automatic activity detection
+    
     try:
-
+        # Check if systems are initialized BEFORE accepting websocket
+        if not rag_sys or not gemini_live_manager:
+            await websocket.close(code=1011, reason="Systems not initialized")
+            return
+        
+        # Get or create call session BEFORE accepting websocket
+        print("📞 Setting up call session...")
         db_gen = get_db()
         db = next(db_gen)
-
         service = CallSessionService(db)
+        
         call_session = service.get_by_id(call_session_id)
-        call_summary = call_session.summarized_content
-
-       
-    except Exception as e:
-        print(f"Error getting call session: {e}")
-
-
-    """ If no call session ID, create a new one """
-    if not call_session:
-        create_call_session = service.create(
-            CallSessionBase(
-                cust_id="0123334444",
+        call_summary = call_session.summarized_content if call_session else None
+        
+        # Create new call session if not exists
+        if not call_session:
+            create_call_session = service.create(
+                CallSessionBase(cust_id="0123334444")
             )
+            call_session = service.get_by_id(create_call_session.id)
+            call_session_id = call_session.id
+            
+        print(f"📞 Call session ID: {call_session_id}")
+        
+        # Create and prepare Gemini Live session BEFORE accepting websocket
+        print("🎤 Creating Gemini Live session...")
+        gemini_session = await gemini_live_manager.create_session(
+            call_session_id=str(call_session_id),
+            rag_system=rag_sys,
+            call_summary=call_summary
         )
-        call_session = service.get_by_id(create_call_session.id)
-        print(f"Call session ID: {call_session.id}")
-        print(f"Call session customer ID: {call_session.cust_id}")
-    
-    # Call Session ID in
-    # What is the phone number?
-
-    # If PN, get latest call session@summarized
-    # pass into RAG
-
-    await ws.accept()
-    await ws.send_text("✅ WebSocket connected to Google STT")
-
-    if not rag_sys:
-        await ws.send_text(json.dumps({
-            "type": "error",
-            "message": "RAG system not initialized"
-        }))
-        return
-
-    # Create Google Speech client and config (reusable)
-    speech_client = speech.SpeechClient()
-    
-    config = speech.RecognitionConfig(
-        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-        sample_rate_hertz=16000,
-        language_code="en-US",
-    )
-
-    streaming_config = speech.StreamingRecognitionConfig(
-        config=config,
-        interim_results=True,
-    )
-
-    # Keep track of overall conversation and TTS state
-    from stt import TTSStateManager
-    conversation_transcript_manager = TranscriptManager()
-    tts_state_manager = TTSStateManager()
-    retry_count = 0
-    max_retries = 5  # Prevent infinite loops
-    consecutive_tts_timeouts = 0  # Track TTS-related timeouts
-    
-    while retry_count < max_retries:
-        try:
-            # Check WebSocket connection before starting
-            if ws.application_state == 3:  # DISCONNECTED
-                print("❌ WebSocket disconnected - ending session")
-                break
-                
-            print(f"🎤 Starting speech session (attempt {retry_count + 1})")
+        
+        # Prepare Gemini Live configuration
+        print("🔄 Preparing Gemini Live configuration...")
+        config_success = await gemini_session.connect()
+        if not config_success:
+            await websocket.close(code=1011, reason="Failed to prepare Gemini Live configuration")
+            return
+        
+        print("🔗 Establishing Gemini Live connection (blocking)...")
+        # Establish the actual connection before accepting websocket
+        async with gemini_session.client.aio.live.connect(
+            model=gemini_session.config.model_name,
+            config=gemini_session.connection_config
+        ) as session:
+            print("✅ Gemini Live connected successfully! Now accepting websocket...")
+            gemini_session.session = session  # Store session reference
             
-            # Notify frontend about session start/restart
-            if retry_count > 0:
-                try:
-                    await ws.send_text(json.dumps({
-                        "type": "session_restart",
-                        "message": f"Restarting speech recognition (attempt {retry_count + 1})",
-                        "retry_count": retry_count
-                    }))
-                    print(f"📱 Sent restart notification to frontend (attempt {retry_count + 1})")
-                except Exception as send_error:
-                    print(f"❌ Failed to send restart notification: {send_error}")
-                    break  # If we can't send to frontend, connection is likely broken
+            # NOW accept the websocket after everything is ready
+            await websocket.accept()
             
-            # Start speech session WITH RAG 
-            session_transcript_manager = await start_speech_session(
-                ws, 
-                rag_sys, 
-                speech_client, 
-                config, 
-                streaming_config, 
-                tts_state_manager,
-                call_session_id, 
-                call_summary
-            )
+            # Send immediate success message
+            try:
+                await websocket.send_json({
+                    "type": "connected",
+                    "message": "Connected to Gemini Live. You can start speaking now.",
+                    "session_id": call_session_id
+                })
+                print("📤 Success message sent to client")
+            except Exception as send_error:
+                print(f"⚠️ Client disconnected before receiving success message: {send_error}")
+                return
             
-            # If we get here, session completed successfully
-            print("✅ Speech session completed successfully")
-            
-            # Merge session transcript into conversation transcript
-            if session_transcript_manager:
-                final_text = session_transcript_manager.get_final_only()
-                if final_text:
-                    conversation_transcript_manager.add_final(final_text)
-            
-            break  # Exit retry loop on success
-            
-        except Exception as e:
-            error_message = str(e)
-            print(f"❌ Speech session error: {error_message}")
-            
-            # Check WebSocket state before deciding to retry
-            if ws.application_state == 3:  # DISCONNECTED
-                print("❌ WebSocket disconnected during error - ending session")
-                break
-            
-            # Check if it's a timeout error that we should retry
-            if ("Audio Timeout Error" in error_message or 
-                "400" in error_message or 
-                "Long duration elapsed without audio" in error_message):
-                
-                retry_count += 1
-                
-                # Check if this was a TTS-related timeout
-                was_tts_timeout = "Speech timeout during TTS" in error_message or tts_state_manager.is_active()
-                if was_tts_timeout:
-                    consecutive_tts_timeouts += 1
-                    print(f"🔊 TTS-related timeout detected (consecutive: {consecutive_tts_timeouts})")
-                    # End TTS state to ensure clean restart
-                    tts_state_manager.end_tts()
-                else:
-                    consecutive_tts_timeouts = 0  # Reset if not TTS-related
-                
-                # Allow more retries for TTS-related timeouts since they're expected during AI responses
-                effective_max_retries = max_retries + 3 if consecutive_tts_timeouts > 2 else max_retries
-                
-                if retry_count >= effective_max_retries:
-                    if consecutive_tts_timeouts > 2:
-                        print(f"💀 Maximum retries ({effective_max_retries}) exceeded (many TTS timeouts)")
-                    else:
-                        print(f"💀 Maximum retries ({max_retries}) exceeded")
-                    break
-                
-                print(f"🔄 Retrying speech session ({retry_count}/{max_retries})")
-                
-                # Notify frontend about the retry
-                try:
-                    retry_message = "Speech timeout - restarting recognition..."
-                    if was_tts_timeout:
-                        retry_message = "Speech timeout during AI response - restarting recognition..."
-                    
-                    await ws.send_text(json.dumps({
-                        "type": "timeout_retry",
-                        "message": retry_message,
-                        "retry_count": retry_count,
-                        "max_retries": max_retries,
-                        "was_tts_timeout": was_tts_timeout
-                    }))
-                    print(f"📱 Sent timeout retry notification (attempt {retry_count})")
-                except Exception as send_error:
-                    print(f"❌ Failed to send retry notification: {send_error}")
-                    break  # Connection likely broken
-                
-                # Longer delay for TTS-related timeouts to let audio finish playing
-                delay = 3 if was_tts_timeout else 2
-                print(f"⏳ Waiting {delay} seconds before retry...")
-                await asyncio.sleep(delay)
-                continue
-            else:
-                # Non-timeout error - don't retry
-                print(f"💥 Non-recoverable error (not retrying): {error_message}")
-                break
-    
-    # Final cleanup and session summary
-    try:
-        if ws.application_state != 3:  # Not disconnected
-            final_complete = conversation_transcript_manager.get_final_only()
-            
-            if retry_count >= max_retries:
-                await ws.send_text(json.dumps({
-                    "type": "session_failed",
-                    "message": "Maximum retries exceeded. Please refresh and try again.",
-                    "final_transcript": final_complete
-                }))
-            else:
-                await ws.send_text(json.dumps({
-                    "type": "session_complete",
-                    "final_transcript": final_complete,
-                    "total_retries": retry_count,
-                    "tts_timeouts": consecutive_tts_timeouts
-                }))
-
-               
-            if final_complete:
-                # Save to database
-                from database.connection import SessionLocal
-                from services.transcript_crud import TranscriptCRUD
-                from database.schemas import TranscriptCreate
-
-                db = SessionLocal()
-                try:
-                    transcript_data = TranscriptCreate(
-                        session_id=call_session_id,
-                        message=final_complete,
-                        message_by="System",
+            # Send initial greeting trigger to Gemini Live
+            try:
+                from google.genai.types import Content, Part
+                print("🎯 Sending initial greeting trigger to Gemini Live...")
+                await session.send_client_content(
+                    turns=Content(
+                        role="user", 
+                        parts=[Part(text="Hello, I'm interested in learning about properties at Gamuda Cove.")]
                     )
-                    TranscriptCRUD.create_transcript(db, transcript=transcript_data)
-                finally:
-                    db.close()
-        else:
-            print("WebSocket already closed, skipping final message")
-    except Exception as e:
-        print(f"Error sending final transcript: {e}")
+                )
+                print("✅ Initial greeting trigger sent")
+            except Exception as trigger_error:
+                print(f"⚠️ Failed to send initial greeting trigger: {trigger_error}")
+                # Continue anyway - not critical
+            
+            # Start background listener for Gemini Live responses
+            async def handle_gemini_responses():
+                """Handle responses from Gemini Live"""
+                try:
+                    audio_buffer = []
+                    
+                    async for message in session.receive():
+                        if not gemini_session.session_active:
+                            break
+                        
+                        try:
+                            # Handle server content (audio/text responses)
+                            if message.server_content:
+                                server_content = message.server_content
+                                
+                                # Handle model turn (audio response)
+                                if server_content.model_turn and server_content.model_turn.parts:
+                                    for part in server_content.model_turn.parts:
+                                        if part.inline_data:
+                                            # Collect audio data
+                                            audio_data = np.frombuffer(part.inline_data.data, dtype=np.int16)
+                                            audio_buffer.append(audio_data)
+                                        
+                                        elif part.text:
+                                            # Handle text response (for debugging/logging)
+                                            text_content = part.text
+                                            print(f"📝 Gemini response: {text_content}")
+                                            
+                                            # Save to database
+                                            try:
+                                                from services.transcript_crud import create_session_message
+                                                create_session_message(
+                                                    db,
+                                                    session_id=str(call_session_id),
+                                                    message=text_content,
+                                                    message_by="AI"
+                                                )
+                                            except Exception as e:
+                                                print(f"❌ Error saving to database: {e}")
+                                
+                                # Handle turn completion
+                                if server_content.turn_complete:
+                                    # Send accumulated audio to client
+                                    if audio_buffer:
+                                        # Concatenate all audio chunks
+                                        full_audio = np.concatenate(audio_buffer)
+                                        # Convert to base64 for transmission
+                                        audio_base64 = base64.b64encode(full_audio.tobytes()).decode('utf-8')
+                                        
+                                        try:
+                                            await websocket.send_json({
+                                                "type": "audio_response",
+                                                "audio_data": audio_base64,
+                                                "encoding": "base64",
+                                                "sample_rate": 24000,
+                                                "dtype": "int16"
+                                            })
+                                            print(f"📤 Sent {len(full_audio)} audio samples to client")
+                                            
+                                        except Exception as e:
+                                            print(f"❌ Error sending audio to client: {e}")
+                                        
+                                        # Clear buffer
+                                        audio_buffer = []
+                                    
+                                    # Send turn complete signal
+                                    try:
+                                        await websocket.send_json({
+                                            "type": "turn_complete",
+                                            "message": "AI finished speaking"
+                                        })
+                                    except Exception as e:
+                                        print(f"❌ Error sending turn complete: {e}")
+                            
+                            # Handle tool calls (function calls)
+                            if message.tool_call:
+                                tool_call = message.tool_call
+                                
+                                for function_call in tool_call.function_calls:
+                                    # Process the function call
+                                    response = await gemini_session.handle_function_call({
+                                        "name": function_call.name,
+                                        "args": function_call.args
+                                    })
+                                    
+                                    # Send function response back to Gemini Live
+                                    await session.send_tool_response(
+                                        function_response=response
+                                    )
+                                    print(f"📤 Sent tool response: {response['name']}")
+                            
+                        except Exception as e:
+                            print(f"❌ Error processing Gemini message: {e}")
+                            continue
+                
+                except Exception as e:
+                    print(f"❌ Error in Gemini response handler: {e}")
+            
+            # Start the response handler as a background task
+            response_task = asyncio.create_task(handle_gemini_responses())
+            
+            # Handle incoming messages from client
+            async for message in websocket.iter_text():
+                try:
+                    # Ensure message is properly decoded as string
+                    if isinstance(message, bytes):
+                        message = message.decode('utf-8')
+                    elif not isinstance(message, str):
+                        print(f"⚠️ Unexpected message type: {type(message)}")
+                        continue
+                    
+                    data = json.loads(message)
+                    message_type = data.get("type")
+                    
+                    if message_type == "audio_chunk":
+                        # Handle audio input from client
+                        audio_data_b64 = data.get("audio_data", "")
+                        
+                        if audio_data_b64:
+                            # Decode base64 audio data
+                            audio_bytes = base64.b64decode(audio_data_b64)
+                            
+                            # Send all audio to Gemini Live (VAD disabled for testing)
+                            await gemini_session.send_audio_chunk(audio_bytes)
+                    
+                    elif message_type == "start_speaking":
+                        # Optional: Manual client control (for debugging)
+                        print("🎤 Client: Manual start speaking signal (using built-in VAD)")
+                        
+                    elif message_type == "stop_speaking":
+                        # Optional: Manual client control (for debugging)
+                        print("🔇 Client: Manual stop speaking signal (using built-in VAD)")
+                    
+                    elif message_type == "text_message":
+                        # Handle text input (for debugging or fallback)
+                        text_content = data.get("text", "")
+                        print(f"📝 Received text: {text_content}")
+                        
+                        # You can send text to Gemini Live if needed
+                        # For now, we'll focus on audio-only interaction
+                        
+                    elif message_type == "end_session":
+                        # Clean session termination
+                        print("🔚 Client requested session end")
+                        break
+                    
+                    else:
+                        print(f"❓ Unknown message type: {message_type}")
+                        
+                except json.JSONDecodeError as e:
+                    print(f"❌ Invalid JSON received: {message[:100]}... Error: {e}")
+                    continue
+                except UnicodeDecodeError as e:
+                    print(f"❌ Text decoding error: {e}")
+                    continue
+                except Exception as e:
+                    print(f"❌ Error processing message: {e}")
+                    continue
     
-    print(f"🏁 STT WebSocket session ended (total retries: {retry_count})")
-
+    except Exception as e:
+        print(f"❌ Error in websocket setup or communication: {e}")
+        # Try to close websocket if it was accepted
+        try:
+            await websocket.close(code=1011, reason=f"Setup error: {str(e)}")
+        except:
+            pass
+    
+    except WebSocketDisconnect:
+        print("🔌 Client disconnected")
+    
+    finally:
+        # Clean up
+        print("🧹 Cleaning up Gemini Live session...")
+        
+        # Cancel response task
+        if response_task and not response_task.done():
+            response_task.cancel()
+            try:
+                await response_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Close Gemini Live session
+        if gemini_session:
+            await gemini_session.close()
+        
+        # Close database connection
+        if db:
+            db.close()
+        
+        print("✅ Gemini Live session cleanup completed")
 
 @app.get("/test-rag")
 async def test_rag_endpoint():
-    """Test endpoint to verify MongoDB RAG functionality"""
+    """Test endpoint to verify RAG functionality"""
     if not rag_sys:
         return JSONResponse(
             status_code=503, 
             content={"error": "RAG system not initialized"}
         )
     
-    test_query = "what is the genetic syndrome for diabetes"
+    test_query = "What properties are available at Gamuda Cove?"
     
     try:
-        # Test the RAG query
         result = await rag_sys.rag_query(
             query=test_query,
             include_sources=True,
-            use_memory=False  # Don't use memory for testing
+            use_memory=False
         )
         
-        # Add system stats
         result["system_stats"] = {
             "vector_store_stats": rag_sys.get_vector_store_stats(),
             "connection_test": rag_sys.test_connection(),
@@ -483,34 +445,42 @@ async def test_rag_endpoint():
             }
         )
 
-
-@app.get("/rag-status")
-async def rag_status():
-    """Get RAG system status and MongoDB connection info"""
-    if not rag_sys:
+@app.get("/gemini-live-status")
+async def gemini_live_status():
+    """Get Gemini Live system status"""
+    if not gemini_live_manager:
         return {
             "status": "not_initialized",
-            "message": "RAG system not initialized"
+            "message": "Gemini Live system not initialized"
         }
     
     return {
         "status": "initialized",
-        "mongodb_connection": rag_sys.test_connection(),
-        "vector_store_stats": rag_sys.get_vector_store_stats(),
-        "config": {
-            "database": rag_sys.config.db_name,
-            "collection": rag_sys.config.collection_name,
-            "index_name": rag_sys.config.atlas_vector_search_index_name,
-            "embedding_model": rag_sys.config.embedding_model,
-            "llm_model": rag_sys.config.llm_model,
-            "top_k": rag_sys.config.top_k_docs
+        "message": "Gemini Live system ready",
+        "active_sessions": len(gemini_live_manager.active_sessions),
+        "model": gemini_live_manager.config.model_name,
+        "voice": gemini_live_manager.config.voice_name
+    }
+
+@app.get("/system-status")
+async def system_status():
+    """Get overall system status"""
+    return {
+        "initialization": init_status,
+        "rag_system": {
+            "status": "initialized" if rag_sys else "not_initialized",
+            "mongodb_connection": rag_sys.test_connection() if rag_sys else False,
+            "vector_store_stats": rag_sys.get_vector_store_stats() if rag_sys else None
+        },
+        "gemini_live": {
+            "status": "initialized" if gemini_live_manager else "not_initialized",
+            "active_sessions": len(gemini_live_manager.active_sessions) if gemini_live_manager else 0
         }
     }
 
-
 @app.get("/check-documents")
 async def check_documents():
-    """Check what documents are actually in the MongoDB collection"""
+    """Check what documents are in the MongoDB collection"""
     if not rag_sys:
         return JSONResponse(
             status_code=503,
@@ -518,27 +488,17 @@ async def check_documents():
         )
     
     try:
-        # Get collection stats
         collection = rag_sys.mongodb_collection
         
-        # Count total documents
         total_docs = collection.count_documents({})
+        sample_docs = list(collection.find().limit(3))
         
-        # Get sample documents (first 5)
-        sample_docs = list(collection.find().limit(5))
-        
-        # Convert ObjectId to string for JSON serialization
         for doc in sample_docs:
             if '_id' in doc:
                 doc['_id'] = str(doc['_id'])
         
-        # Check if documents have embeddings
         docs_with_embeddings = collection.count_documents({"embedding": {"$exists": True}})
-        
-        # Get field names from a sample document
-        sample_fields = []
-        if sample_docs:
-            sample_fields = list(sample_docs[0].keys())
+        sample_fields = list(sample_docs[0].keys()) if sample_docs else []
         
         return {
             "total_documents": total_docs,
@@ -556,10 +516,9 @@ async def check_documents():
             content={"error": f"Failed to check documents: {str(e)}"}
         )
 
-
 @app.get("/test-retrieval/{query}")
 async def test_retrieval(query: str):
-    """Test document retrieval directly from MongoDB Atlas Vector Search"""
+    """Test document retrieval from MongoDB Atlas Vector Search"""
     if not rag_sys:
         return JSONResponse(
             status_code=503,
@@ -569,17 +528,9 @@ async def test_retrieval(query: str):
     try:
         print(f"🔍 Testing retrieval for query: {query}")
         
-        # Test connection first
         connection_ok = rag_sys.test_connection()
-        print(f"📶 MongoDB connection: {connection_ok}")
-        
-        # Get collection stats
         stats = rag_sys.get_vector_store_stats()
-        print(f"📊 Collection stats: {stats}")
-        
-        # Test document retrieval
         retrieved_docs = await rag_sys.retrieve_relevant_docs(query, top_k=5)
-        print(f"📄 Retrieved {len(retrieved_docs)} documents")
         
         return {
             "query": query,
@@ -602,3 +553,7 @@ async def test_retrieval(query: str):
                 "connection_status": rag_sys.test_connection() if rag_sys else False
             }
         )
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
