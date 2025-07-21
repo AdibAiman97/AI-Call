@@ -11,13 +11,18 @@
             left: `${(i - 1) * 2}%`
           }"
         >
+          <!-- All blocks with smooth animation -->
           <div 
-            v-for="j in getColumnHeight(i)" 
-            :key="j" 
+            v-for="j in getTotalHeight(i)" 
+            :key="`block-${j}`" 
             class="cube-block"
+            :class="{ 
+              'base-block': j <= getBaseHeight(i),
+              'animated-block': j > getBaseHeight(i)
+            }"
             :style="{ 
               bottom: `${(j - 1) * 22}px`,
-              animationDelay: `${i * 0.05}s`
+              transitionDelay: `${j * 50}ms`
             }"
           ></div>
         </div>
@@ -25,7 +30,7 @@
     </div>
 
     <v-row class="text-center mb-12 d-flex align-center position-relative">
-      <v-col cols="12" class="slide-up">
+      <v-col cols="12" class="slide-up mb-16 pb-16">
         <h1 class="text-h2 text-md-h1 font-weight-bold mb-3">
           <span class="text-gradient">AI-Powered</span> Call Assistant
         </h1>
@@ -61,38 +66,62 @@ import { useCallStore } from "@/stores/call";
 const callStore = useCallStore();
 
 // Create dynamic heights for soundwave columns
-const columnHeights = ref<number[]>([]);
+const baseHeights = ref<number[]>([]);
+const currentHeights = ref<number[]>([]);
+const targetHeights = ref<number[]>([]);
 
-const getColumnHeight = (index: number) => {
-  return columnHeights.value[index] || 1;
+const getBaseHeight = (index: number) => {
+  return baseHeights.value[index - 1] || 1; // Convert 1-based to 0-based index
 };
 
-const updateSoundwave = () => {
-  // Create more realistic speech patterns with sudden spikes and quieter moments
-  const patterns = [
-    // Pattern 1: Conversation start
-    [1, 2, 1, 1, 4, 8, 6, 3, 2, 1, 2, 5, 9, 7, 4, 2, 1, 1, 3, 6, 8, 5, 2, 1, 1, 2, 4, 7, 9, 6, 3, 1, 2, 5, 8, 7, 4, 2, 1, 1, 3, 6, 8, 5, 2, 1, 1, 2, 4, 7],
-    // Pattern 2: Excited speech
-    [2, 1, 3, 7, 10, 8, 5, 3, 6, 9, 7, 4, 2, 1, 3, 8, 11, 9, 6, 4, 2, 5, 8, 10, 7, 3, 1, 2, 6, 9, 8, 5, 3, 1, 4, 7, 9, 6, 3, 2, 1, 5, 8, 7, 4, 2, 1, 3, 6, 8],
-    // Pattern 3: Calm explanation
-    [1, 1, 2, 4, 6, 5, 4, 3, 2, 3, 5, 6, 4, 3, 2, 1, 2, 4, 5, 4, 3, 2, 1, 2, 4, 6, 5, 3, 2, 1, 3, 5, 4, 3, 2, 1, 2, 4, 5, 4, 3, 2, 1, 2, 4, 6, 5, 3, 2, 1],
-    // Pattern 4: Question and pause
-    [1, 2, 4, 6, 8, 9, 7, 5, 3, 1, 1, 1, 1, 1, 2, 4, 6, 5, 3, 2, 1, 1, 1, 1, 3, 6, 8, 7, 4, 2, 1, 1, 1, 2, 5, 7, 6, 4, 2, 1, 1, 1, 1, 3, 5, 6, 4, 2, 1, 1]
-  ];
+const getTotalHeight = (index: number) => {
+  return currentHeights.value[index - 1] || 1; // Convert 1-based to 0-based index
+};
+
+const animateToTarget = () => {
+  currentHeights.value = currentHeights.value.map((current, index) => {
+    const target = targetHeights.value[index] || 1;
+    if (current < target) {
+      return current + 1; // Add one block
+    } else if (current > target) {
+      return current - 1; // Remove one block
+    }
+    return current;
+  });
   
-  const randomPattern = patterns[Math.floor(Math.random() * patterns.length)];
-  
-  columnHeights.value = randomPattern.map(height => {
-    // Add small random variations for more natural feel
-    const variation = Math.floor(Math.random() * 2); // 0 or 1
-    return Math.max(1, Math.min(12, height + variation));
+  // Continuously generate new targets for columns that reached their goal
+  targetHeights.value = targetHeights.value.map((target, index) => {
+    const current = currentHeights.value[index];
+    // If this column reached its target, give it a new random target
+    if (current === target) {
+      return Math.floor(Math.random() * 15) + 1; // Increased max height to 15
+    }
+    return target;
   });
 };
 
 onMounted(() => {
-  updateSoundwave();
-  // Update more frequently for realistic speech patterns
-  setInterval(updateSoundwave, 800);
+  // Generate base pattern for all 50 columns
+  const staticBasePattern = [];
+  for (let i = 0; i < 50; i++) {
+    // Create a repeating pattern
+    const patternValues = [1, 1, 2, 1, 2, 3, 2, 1, 1, 2];
+    staticBasePattern.push(patternValues[i % patternValues.length]);
+  }
+  baseHeights.value = staticBasePattern;
+  
+  // Initialize current heights to base heights
+  currentHeights.value = [...staticBasePattern];
+  
+  // Initialize with random targets to start movement immediately
+  const initialTargets = [];
+  for (let i = 0; i < 50; i++) {
+    initialTargets.push(Math.floor(Math.random() * 15) + 1); // Increased max height to 15
+  }
+  targetHeights.value = initialTargets;
+  
+  // Animate blocks step by step
+  setInterval(animateToTarget, 120); // Fast animation step
 });
 </script>
 
@@ -139,35 +168,37 @@ onMounted(() => {
   position: absolute;
   width: 20px;
   height: 20px;
-  background: linear-gradient(135deg, rgba(100, 255, 218, 0.5), rgba(14, 165, 233, 0.5));
-  border: 1px solid rgba(100, 255, 218, 0.3);
+  background: linear-gradient(135deg, rgba(100, 255, 218, 0.7), rgba(14, 165, 233, 0.7));
+  border: 1px solid rgba(100, 255, 218, 0.4);
   border-radius: 3px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  animation: cube-glow 1.6s ease-in-out infinite;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   transform-origin: bottom;
+  opacity: 0.8;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: block-appear 0.15s ease-out;
 }
 
-@keyframes cube-glow {
-  0%, 100% {
-    opacity: 0.3;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    transform: scaleY(1);
+.base-block {
+  opacity: 0.5;
+  background: linear-gradient(135deg, rgba(100, 255, 218, 0.4), rgba(14, 165, 233, 0.4));
+  border: 1px solid rgba(100, 255, 218, 0.2);
+}
+
+.animated-block {
+  opacity: 0.9;
+  background: linear-gradient(135deg, rgba(100, 255, 218, 0.8), rgba(14, 165, 233, 0.8));
+  border: 1px solid rgba(100, 255, 218, 0.5);
+  box-shadow: 0 3px 6px rgba(100, 255, 218, 0.3);
+}
+
+@keyframes block-appear {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scaleY(0.7);
   }
-  20% {
-    opacity: 0.7;
-    box-shadow: 0 4px 8px rgba(100, 255, 218, 0.4);
-    transform: scaleY(1.1);
-  }
-  50% {
-    opacity: 0.9;
-    box-shadow: 0 6px 12px rgba(100, 255, 218, 0.5);
-    transform: scaleY(1.05);
-  }
-  80% {
-    opacity: 0.6;
-    box-shadow: 0 4px 8px rgba(100, 255, 218, 0.3);
-    transform: scaleY(1);
+  100% {
+    opacity: inherit;
+    transform: translateY(0) scaleY(1);
   }
 }
 
