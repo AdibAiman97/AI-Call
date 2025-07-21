@@ -61,8 +61,9 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted, nextTick } from "vue";
 import { useCallStore } from "@/stores/call";
+import { useRouter } from "vue-router";
 
 const callStore = useCallStore();
 
@@ -115,11 +116,16 @@ const animateToTarget = () => {
   });
 };
 
-onMounted(() => {
-  // Remove margin only for this page using CSS class
+onMounted(async () => {
+  // Wait for DOM to be ready and apply changes immediately
+  await nextTick();
   const vMain = document.querySelector('.v-main') as HTMLElement;
   if (vMain) {
+    // Disable transitions temporarily
+    vMain.style.transition = 'none';
     vMain.classList.add('landing-page-no-margin');
+    // Force reflow
+    vMain.offsetHeight;
   }
 
   // Generate base pattern for all 50 columns
@@ -149,7 +155,17 @@ onUnmounted(() => {
   // Restore margin when leaving this page
   const vMain = document.querySelector('.v-main') as HTMLElement;
   if (vMain) {
+    // Disable transitions before removing class
+    vMain.style.transition = 'none';
     vMain.classList.remove('landing-page-no-margin');
+    // Force reflow
+    vMain.offsetHeight;
+    // Re-enable transitions after a brief delay
+    setTimeout(() => {
+      if (vMain) {
+        vMain.style.transition = '';
+      }
+    }, 50);
   }
 });
 </script>
@@ -160,6 +176,12 @@ onUnmounted(() => {
 .landing-page-no-margin.v-main.ma-10 {
   margin: 0 !important;
   padding: 0 !important;
+  transition: none !important;
+}
+
+/* Disable transitions on v-main when changing routes */
+.v-main {
+  transition: none !important;
 }
 </style>
 
