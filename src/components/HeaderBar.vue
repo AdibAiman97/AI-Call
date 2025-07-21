@@ -1,5 +1,5 @@
 <template>
-  <v-app-bar :elevation="2" class="px-10">
+  <v-app-bar :elevation="2" class="px-10 py-1">
     <template v-slot:prepend>
       <v-app-bar-nav-icon
         v-if="isAdminRoute"

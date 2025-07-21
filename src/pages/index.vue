@@ -22,7 +22,8 @@
             }"
             :style="{ 
               bottom: `${(j - 1) * 22}px`,
-              transitionDelay: `${j * 50}ms`
+              transitionDelay: `${j * 50}ms`,
+              background: getBlockColor(j)
             }"
           ></div>
         </div>
@@ -76,6 +77,20 @@ const getBaseHeight = (index: number) => {
 
 const getTotalHeight = (index: number) => {
   return currentHeights.value[index - 1] || 1; // Convert 1-based to 0-based index
+};
+
+const getBlockColor = (blockHeight: number) => {
+  // Interpolate between #64ffda (bottom) and #0ea5e9 (top)
+  // Assuming max height of 15 blocks
+  const progress = Math.min((blockHeight - 1) / 14, 1); // 0 to 1
+  
+  // Bottom color: #64ffda (100, 255, 218)
+  // Top color: #0ea5e9 (14, 165, 233)
+  const r = Math.round(100 + (14 - 100) * progress);
+  const g = Math.round(255 + (165 - 255) * progress);
+  const b = Math.round(218 + (233 - 218) * progress);
+  
+  return `rgb(${r}, ${g}, ${b})`;
 };
 
 const animateToTarget = () => {
@@ -168,7 +183,6 @@ onMounted(() => {
   position: absolute;
   width: 20px;
   height: 20px;
-  background: linear-gradient(135deg, rgba(100, 255, 218, 0.7), rgba(14, 165, 233, 0.7));
   border: 1px solid rgba(100, 255, 218, 0.4);
   border-radius: 3px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -179,16 +193,14 @@ onMounted(() => {
 }
 
 .base-block {
-  opacity: 0.5;
-  background: linear-gradient(135deg, rgba(100, 255, 218, 0.4), rgba(14, 165, 233, 0.4));
-  border: 1px solid rgba(100, 255, 218, 0.2);
+  opacity: 0.4;
+  border: 1px solid rgba(100, 255, 218, 0.3);
 }
 
 .animated-block {
   opacity: 0.9;
-  background: linear-gradient(135deg, rgba(100, 255, 218, 0.8), rgba(14, 165, 233, 0.8));
-  border: 1px solid rgba(100, 255, 218, 0.5);
-  box-shadow: 0 3px 6px rgba(100, 255, 218, 0.3);
+  border: 1px solid rgba(100, 255, 218, 0.6);
+  box-shadow: 0 3px 6px rgba(100, 255, 218, 0.4);
 }
 
 @keyframes block-appear {
