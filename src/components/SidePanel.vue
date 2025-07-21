@@ -1,5 +1,10 @@
 <template>
-  <v-navigation-drawer v-model="drawerOpen">
+  <v-navigation-drawer 
+    v-model="drawerOpen" 
+    :temporary="true"
+    :disable-resize-watcher="true"
+    v-if="isAdminRoute"
+  >
     <v-list-item-group class="pa-5 text-center">
       <v-list-item
         v-for="item in menuItems"
@@ -22,7 +27,7 @@
 
 <script setup>
 import { computed } from "vue";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 
 import SvgIcon from "@jamescoyle/vue-icon";
 import { mdiViewDashboard } from "@mdi/js";
@@ -32,6 +37,12 @@ import { mdiFrequentlyAskedQuestions } from "@mdi/js";
 const emit = defineEmits(["update:open"]);
 
 const router = useRouter();
+const route = useRoute();
+
+// Only show sidepanel on admin routes
+const isAdminRoute = computed(() => {
+  return route.path.startsWith("/admin");
+});
 
 const props = defineProps({
   open: {
