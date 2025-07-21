@@ -61,7 +61,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { useCallStore } from "@/stores/call";
 
 const callStore = useCallStore();
@@ -116,6 +116,12 @@ const animateToTarget = () => {
 };
 
 onMounted(() => {
+  // Remove margin only for this page using CSS class
+  const vMain = document.querySelector('.v-main') as HTMLElement;
+  if (vMain) {
+    vMain.classList.add('landing-page-no-margin');
+  }
+
   // Generate base pattern for all 50 columns
   const staticBasePattern = [];
   for (let i = 0; i < 50; i++) {
@@ -138,11 +144,20 @@ onMounted(() => {
   // Animate blocks step by step
   setInterval(animateToTarget, 120); // Fast animation step
 });
+
+onUnmounted(() => {
+  // Restore margin when leaving this page
+  const vMain = document.querySelector('.v-main') as HTMLElement;
+  if (vMain) {
+    vMain.classList.remove('landing-page-no-margin');
+  }
+});
 </script>
 
+
 <style>
-/* Global style to remove layout margins specifically for landing page */
-.v-main.ma-10 {
+/* Global CSS class for landing page margin removal */
+.landing-page-no-margin.v-main.ma-10 {
   margin: 0 !important;
   padding: 0 !important;
 }
