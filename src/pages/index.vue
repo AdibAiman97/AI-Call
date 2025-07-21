@@ -1,6 +1,30 @@
 <template>
-  <div class="fill-height d-flex">
-    <v-row class="text-center mb-12 d-flex align-center">
+  <div class="fill-height d-flex hero-container">
+    <!-- Cube soundwave background -->
+    <div class="soundwave-background">
+      <div class="cube-soundwave">
+        <div 
+          v-for="i in 50" 
+          :key="i" 
+          class="soundwave-column"
+          :style="{ 
+            left: `${(i - 1) * 2}%`
+          }"
+        >
+          <div 
+            v-for="j in getColumnHeight(i)" 
+            :key="j" 
+            class="cube-block"
+            :style="{ 
+              bottom: `${(j - 1) * 22}px`,
+              animationDelay: `${i * 0.05}s`
+            }"
+          ></div>
+        </div>
+      </div>
+    </div>
+
+    <v-row class="text-center mb-12 d-flex align-center position-relative">
       <v-col cols="12" class="slide-up">
         <h1 class="text-h2 text-md-h1 font-weight-bold mb-3">
           <span class="text-gradient">AI-Powered</span> Call Assistant
@@ -31,12 +55,123 @@
 </template>
 
 <script lang="ts" setup>
+import { ref, onMounted } from "vue";
 import { useCallStore } from "@/stores/call";
 
 const callStore = useCallStore();
+
+// Create dynamic heights for soundwave columns
+const columnHeights = ref<number[]>([]);
+
+const getColumnHeight = (index: number) => {
+  return columnHeights.value[index] || 1;
+};
+
+const updateSoundwave = () => {
+  // Create more realistic speech patterns with sudden spikes and quieter moments
+  const patterns = [
+    // Pattern 1: Conversation start
+    [1, 2, 1, 1, 4, 8, 6, 3, 2, 1, 2, 5, 9, 7, 4, 2, 1, 1, 3, 6, 8, 5, 2, 1, 1, 2, 4, 7, 9, 6, 3, 1, 2, 5, 8, 7, 4, 2, 1, 1, 3, 6, 8, 5, 2, 1, 1, 2, 4, 7],
+    // Pattern 2: Excited speech
+    [2, 1, 3, 7, 10, 8, 5, 3, 6, 9, 7, 4, 2, 1, 3, 8, 11, 9, 6, 4, 2, 5, 8, 10, 7, 3, 1, 2, 6, 9, 8, 5, 3, 1, 4, 7, 9, 6, 3, 2, 1, 5, 8, 7, 4, 2, 1, 3, 6, 8],
+    // Pattern 3: Calm explanation
+    [1, 1, 2, 4, 6, 5, 4, 3, 2, 3, 5, 6, 4, 3, 2, 1, 2, 4, 5, 4, 3, 2, 1, 2, 4, 6, 5, 3, 2, 1, 3, 5, 4, 3, 2, 1, 2, 4, 5, 4, 3, 2, 1, 2, 4, 6, 5, 3, 2, 1],
+    // Pattern 4: Question and pause
+    [1, 2, 4, 6, 8, 9, 7, 5, 3, 1, 1, 1, 1, 1, 2, 4, 6, 5, 3, 2, 1, 1, 1, 1, 3, 6, 8, 7, 4, 2, 1, 1, 1, 2, 5, 7, 6, 4, 2, 1, 1, 1, 1, 3, 5, 6, 4, 2, 1, 1]
+  ];
+  
+  const randomPattern = patterns[Math.floor(Math.random() * patterns.length)];
+  
+  columnHeights.value = randomPattern.map(height => {
+    // Add small random variations for more natural feel
+    const variation = Math.floor(Math.random() * 2); // 0 or 1
+    return Math.max(1, Math.min(12, height + variation));
+  });
+};
+
+onMounted(() => {
+  updateSoundwave();
+  // Update more frequently for realistic speech patterns
+  setInterval(updateSoundwave, 800);
+});
 </script>
 
 <style scoped>
+/* Remove layout margins for landing page */
+:deep(.v-main) {
+  margin: 0 !important;
+}
+.hero-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.soundwave-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.cube-soundwave {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.soundwave-column {
+  position: absolute;
+  width: 20px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.cube-block {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background: linear-gradient(135deg, rgba(100, 255, 218, 0.5), rgba(14, 165, 233, 0.5));
+  border: 1px solid rgba(100, 255, 218, 0.3);
+  border-radius: 3px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  animation: cube-glow 1.6s ease-in-out infinite;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: bottom;
+}
+
+@keyframes cube-glow {
+  0%, 100% {
+    opacity: 0.3;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transform: scaleY(1);
+  }
+  20% {
+    opacity: 0.7;
+    box-shadow: 0 4px 8px rgba(100, 255, 218, 0.4);
+    transform: scaleY(1.1);
+  }
+  50% {
+    opacity: 0.9;
+    box-shadow: 0 6px 12px rgba(100, 255, 218, 0.5);
+    transform: scaleY(1.05);
+  }
+  80% {
+    opacity: 0.6;
+    box-shadow: 0 4px 8px rgba(100, 255, 218, 0.3);
+    transform: scaleY(1);
+  }
+}
+
+.position-relative {
+  position: relative;
+  z-index: 2;
+}
+
 .text-gradient {
   background: linear-gradient(90deg, #64ffda, #0ea5e9);
   -webkit-background-clip: text;
@@ -145,6 +280,15 @@ const callStore = useCallStore();
   .call-icon {
     width: 28px;
     height: 28px;
+  }
+  
+  .soundwave-column {
+    width: 16px;
+  }
+  
+  .cube-block {
+    width: 16px;
+    height: 16px;
   }
 }
 </style>
