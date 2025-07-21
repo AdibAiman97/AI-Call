@@ -96,11 +96,15 @@ onMounted(() => {
 });
 </script>
 
-<style scoped>
-/* Remove layout margins for landing page */
-:deep(.v-main) {
+<style>
+/* Global style to remove layout margins specifically for landing page */
+.v-main.ma-10 {
   margin: 0 !important;
+  padding: 0 !important;
 }
+</style>
+
+<style scoped>
 .hero-container {
   position: relative;
   overflow: hidden;

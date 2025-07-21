@@ -24,7 +24,7 @@
     <template v-if="!callStore.isInCall" v-slot:append>
       <v-btn
         @click="toggleUserRole"
-        class="text-capitalize rounded-lg border-4 border-primary text-primary"
+        class="text-capitalize rounded-xl border-4 border-primary text-primary"
         height="30"
         variant="outlined"
       >
