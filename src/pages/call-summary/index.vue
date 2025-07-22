@@ -1,9 +1,6 @@
 <template>
   <div class="d-flex justify-space-between align-center mb-2">
     <h1>Call Summary</h1>
-    <v-btn class="text-capitalize text-foreground">
-      <v-icon class="mr-2"> mdi-export </v-icon> Export
-    </v-btn>
   </div>
 
   <p class="text-foreground pb-2 mb-4">
@@ -82,9 +79,10 @@ import { useHotkey } from '@/utils/Hotkey'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
-useHotkey('z', () => {
+useHotkey('b', () => {
+  console.log('back to homepage')
   router.push('/')
-}, { ctrl: true })
+ }, { shift: true, command: true })
 
 const summaryList = ref([
   "The customer expressed interest in purchasing a family home and outlined their preferred neighborhood, budget range, and essential features like 3 bedrooms and a backyard. The agent acknowledged their needs and suggested a few initial listings for consideration.",

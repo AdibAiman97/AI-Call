@@ -31,10 +31,11 @@ import { useRouter } from 'vue-router'
 const callStore = useCallStore()
 const router = useRouter()
 
-useHotkey('Enter', () => {
+useHotkey('g', () => {
+  console.log('start call hotkey')
   callStore.startCall()
   router.push('/on-call')
-}, { ctrl: true })
+}, { shift: true, command: true })
 
 </script>
 

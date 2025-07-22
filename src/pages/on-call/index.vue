@@ -49,9 +49,10 @@ import { useRouter } from 'vue-router'
 
 const router = useRouter()
 
-useHotkey('Enter', () => {
+useHotkey('g', () => {
+  console.log('call-summary')
   router.push('/call-summary')
-}, { ctrl: true })
+}, { shift: true, command: true })
 
 const callStore = useCallStore();
 

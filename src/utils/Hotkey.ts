@@ -7,26 +7,27 @@ type HotkeyCallback = (event: KeyboardEvent) => void;
  *
  * @param key The key to listen for (e.g., 'k', 'Enter', 'ArrowUp').
  * @param callback The function to execute when the hotkey is pressed.
- * @param modifiers Optional modifiers (ctrl, shift, alt).
+ * @param modifiers Optional modifiers (ctrl, shift, alt, command). `command` maps to the meta key.
  */
 export function useHotkey(
   key: string,
   callback: HotkeyCallback,
-  modifiers: { ctrl?: boolean; shift?: boolean; alt?: boolean } = {}
+  modifiers: { ctrl?: boolean; shift?: boolean; alt?: boolean; command?: boolean } = {},
 ) {
   const handleKeyDown = (event: KeyboardEvent) => {
-    const { ctrl = false, shift = false, alt = false } = modifiers
-
-    // Check for modifier keys (metaKey is for Command key on macOS)
-    const ctrlMatch = ctrl ? event.ctrlKey || event.metaKey : true
-    const shiftMatch = shift ? event.shiftKey : true
-    const altMatch = alt ? event.altKey : true
+    const {
+      ctrl: wantCtrl = false,
+      shift: wantShift = false,
+      alt: wantAlt = false,
+      command: wantCommand = false,
+    } = modifiers
 
     if (
       event.key.toLowerCase() === key.toLowerCase() &&
-      ctrlMatch &&
-      shiftMatch &&
-      altMatch
+      event.ctrlKey === wantCtrl &&
+      event.shiftKey === wantShift &&
+      event.altKey === wantAlt &&
+      event.metaKey === wantCommand
     ) {
       event.preventDefault()
       callback(event)
