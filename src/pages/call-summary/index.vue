@@ -78,6 +78,14 @@
 </template>
 
 <script setup>
+import { useHotkey } from '@/utils/Hotkey'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+useHotkey('z', () => {
+  router.push('/')
+}, { ctrl: true })
+
 const summaryList = ref([
   "The customer expressed interest in purchasing a family home and outlined their preferred neighborhood, budget range, and essential features like 3 bedrooms and a backyard. The agent acknowledged their needs and suggested a few initial listings for consideration.",
   "A prospective buyer called to inquire about a specific property listing they saw online, asking for details on its square footage, age, and recent renovations. The agent provided the requested information and offered to schedule a virtual tour or an in-person viewing.",

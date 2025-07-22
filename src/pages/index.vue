@@ -25,8 +25,17 @@
 
 <script lang="ts" setup>
 import { useCallStore } from '@/stores/call'
+import { useHotkey } from '@/utils/Hotkey'
+import { useRouter } from 'vue-router'
 
 const callStore = useCallStore()
+const router = useRouter()
+
+useHotkey('Enter', () => {
+  callStore.startCall()
+  router.push('/on-call')
+}, { ctrl: true })
+
 </script>
 
 <style scoped>

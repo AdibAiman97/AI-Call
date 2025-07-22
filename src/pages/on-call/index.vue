@@ -44,6 +44,14 @@
 import { AudioLines, Volume2, Phone } from "lucide-vue-next";
 import { useCallStore } from "@/stores/call";
 import { onMounted, onUnmounted, ref, watch } from "vue";
+import { useHotkey } from '@/utils/Hotkey'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+
+useHotkey('Enter', () => {
+  router.push('/call-summary')
+}, { ctrl: true })
 
 const callStore = useCallStore();
 
@@ -61,6 +69,8 @@ const formattedTime = computed(() => {
   const ss = String(elapsedSeconds.value % 60).padStart(2, "0");
   return `${hh}${mm}:${ss}`;
 });
+
+
 
 // Watch when the call starts/stops
 watch(
