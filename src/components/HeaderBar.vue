@@ -1,5 +1,5 @@
 <template>
-  <v-app-bar :elevation="2" class="px-10">
+  <v-app-bar :elevation="2" class="px-10 py-1">
     <template v-slot:prepend>
       <v-app-bar-nav-icon
         v-if="isAdminRoute"
@@ -23,10 +23,9 @@
 
     <template v-if="!callStore.isInCall" v-slot:append>
       <v-btn
-        ref="toggleButton"
         @click="toggleUserRole"
-        class="text-capitalize rounded-lg border-4 border-primary text-primary"
-        height="30"¨
+        class="text-capitalize rounded-xl border-4 border-primary text-primary"
+        height="30"
         variant="outlined"
       >
         {{ currentUserRole === "Admin" ? "Customer" : "Admin" }}
@@ -36,13 +35,11 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useCallStore } from "../stores/call";
-import { useHotkey } from '@/utils/Hotkey';
 
 const callStore = useCallStore();
-const toggleButton = ref(null);
 
 const props = defineProps({
   toggleDrawer: {
@@ -52,6 +49,7 @@ const props = defineProps({
 });
 
 const route = useRoute();
+
 const router = useRouter();
 
 // Computed property to check if the current route is an admin route
@@ -77,12 +75,6 @@ function toggleUserRole() {
 function goHome() {
   router.push('/');
 }
-
-useHotkey('k', () => {
-  if (toggleButton.value && toggleButton.value.$el) {
-    toggleButton.value.$el.click();
-  }
-}, { alt: true });
 </script>
 
 <style scoped>
