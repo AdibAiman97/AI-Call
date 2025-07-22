@@ -6,9 +6,6 @@
 
       <!-- Call Summary Tab Buttons -->
       <div v-if="tab === 'sum'">
-        <v-btn class="text-capitalize text-foreground">
-          <v-icon class="mr-2"> mdi-export </v-icon> Export
-        </v-btn>
       </div>
 
       <!-- Appointment Tab Buttons -->
@@ -294,9 +291,10 @@ import { useRoute } from "vue-router";
 import axios from "axios";
 import { useCallStore } from "@/stores/call";
 import { Plus, ListFilter } from "lucide-vue-next";
-
+import { useHotkey } from '@/utils/Hotkey'
 const tab = ref("sum");
 
+const route = useRoute();
 useHotkey(
   "b",
   () => {
@@ -312,7 +310,6 @@ useHotkey(
   },
   { shift: true, command: true }
 );
-const route = useRoute();
 const callStore = useCallStore();
 
 // Reactive data properties

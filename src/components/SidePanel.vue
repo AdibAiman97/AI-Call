@@ -21,6 +21,7 @@
 </template>
 
 <script setup>
+import { useHotkey } from "@/utils/Hotkey";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 
@@ -52,6 +53,22 @@ function navigate(route) {
   router.push(route);
   drawerOpen.value = false;
 }
+
+useHotkey(
+  "h",
+  () => {
+    navigate("/admin");
+  },
+  { shift: true, command: true }
+);
+
+useHotkey(
+  "d",
+  () => {
+    navigate("/admin/faq-database");
+  },
+  { shift: true, command: true }
+);
 
 function isActiveRoute(route) {
   return router.currentRoute.value.path === route;
