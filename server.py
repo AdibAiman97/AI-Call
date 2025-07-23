@@ -21,6 +21,11 @@ from rag_integration import rag_service, initialize_rag, process_rag_query, get_
 import io
 import tempfile
 
+# Import database components
+from database.connection import engine, Base, get_db
+from services.call_session import CallSessionService
+from database.schemas import CallSessionBase
+
 # Setup logging to both console and file
 logging.basicConfig(
     level=logging.INFO,
@@ -896,6 +901,28 @@ CRITICAL: NEVER include any debug information, tool outputs, technical details, 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for client connections."""
+    
+    db = None
+    
+    # Get or create call session BEFORE accepting websocket
+    print("📞 Setting up call session...")
+    db_gen = get_db()
+    db = next(db_gen)
+    service = CallSessionService(db)
+    
+    call_session = service.get_by_id(call_session_id)
+    call_summary = call_session.summarized_content if call_session else None
+    
+    # Create new call session if not exists
+    if not call_session:
+        create_call_session = service.create(
+            CallSessionBase(cust_id="0123334444")
+        )
+        call_session = service.get_by_id(create_call_session.id)
+        call_session_id = call_session.id
+        
+    print(f"📞 Call session ID: {call_session_id}")
+    
     await websocket.accept()
     print(f"🔌 Client connected ({len(active_connections)+1} total)")
     logger.info("Client connected to WebSocket")
