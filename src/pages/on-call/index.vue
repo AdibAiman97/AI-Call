@@ -42,7 +42,7 @@
       <div class="d-flex align-center justify-center ga-8">
         <v-btn class="bg-foreground" size="70" rounded="circle">
           <v-icon>
-            <volume2 />
+            <Volume2 />
           </v-icon>
         </v-btn>
 
@@ -54,8 +54,8 @@
           rounded="circle"
           :loading="isEnding"
         >
-          <v-icon>
-            <phone color="white" />
+          <v-icon color="white">
+            <Phone />
           </v-icon>
         </v-btn>
       </div>
@@ -307,6 +307,7 @@ onBeforeUnmount(() => {
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { useCallStore } from "@/stores/call";
+import { Volume2, Phone } from "lucide-vue-next";
 // import CallTimer from "@/components/CallTimer.vue";
 // import CallTranscript from "@/components/CallTranscript.vue";
 import GeminiLive from "../../components/GeminiLive.vue";
