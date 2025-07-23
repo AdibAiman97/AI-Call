@@ -1139,3 +1139,55 @@ Inva
 2025-07-23 20:54:58,046 - server - INFO - Client connection cleaned up
 2025-07-23 20:54:58,138 - server - INFO - Shutting down FastAPI server...
 2025-07-23 20:54:58,160 - rag_integration - INFO - MongoDB connection closed
+2025-07-23 21:14:55,865 - server - INFO - Starting up FastAPI server...
+2025-07-23 21:14:55,865 - rag_integration - INFO - Initializing RAG service...
+2025-07-23 21:14:56,440 - rag_integration - INFO - Connected to MongoDB Atlas
+2025-07-23 21:14:56,460 - rag_integration - INFO - Found 7 documents in test_db.voxis_ai
+2025-07-23 21:14:56,462 - rag_integration - INFO - RAG service initialized successfully
+2025-07-23 21:14:56,462 - server - INFO - RAG service initialized successfully
+2025-07-23 21:15:04,004 - server - INFO - Client connected to WebSocket
+2025-07-23 21:15:04,006 - server - INFO - Connecting to Gemini Live API...
+2025-07-23 21:15:14,939 - rag_integration - INFO - Processing RAG query: Mori Pines
+2025-07-23 21:15:16,748 - rag_integration - INFO - RAG query processed successfully, found 5 relevant sources
+2025-07-23 21:15:26,426 - rag_integration - INFO - Processing RAG query: Mori Pines
+2025-07-23 21:15:27,935 - rag_integration - INFO - RAG query processed successfully, found 5 relevant sources
+2025-07-23 21:15:46,092 - server - INFO - Client disconnected normally
+2025-07-23 21:15:46,307 - server - INFO - Disconnected from Gemini
+2025-07-23 21:15:46,307 - server - INFO - Client connection cleaned up
+2025-07-23 21:15:46,396 - server - INFO - Shutting down FastAPI server...
+2025-07-23 21:15:46,416 - rag_integration - INFO - MongoDB connection closed
+2025-07-23 21:15:52,703 - server - INFO - Starting up FastAPI server...
+2025-07-23 21:15:52,703 - rag_integration - INFO - Initializing RAG service...
+2025-07-23 21:15:53,020 - rag_integration - INFO - Connected to MongoDB Atlas
+2025-07-23 21:15:53,041 - rag_integration - INFO - Found 7 documents in test_db.voxis_ai
+2025-07-23 21:15:53,043 - rag_integration - INFO - RAG service initialized successfully
+2025-07-23 21:15:53,043 - server - INFO - RAG service initialized successfully
+2025-07-23 21:15:54,358 - server - INFO - Client connected to WebSocket
+2025-07-23 21:15:54,359 - server - INFO - Connecting to Gemini Live API...
+2025-07-23 21:16:00,233 - server - INFO - Client disconnected normally
+2025-07-23 21:16:00,471 - server - INFO - Disconnected from Gemini
+2025-07-23 21:16:00,471 - server - INFO - Client connection cleaned up
+2025-07-23 21:16:00,536 - server - INFO - Shutting down FastAPI server...
+2025-07-23 21:16:00,558 - rag_integration - INFO - MongoDB connection closed
+2025-07-23 21:18:24,132 - server - INFO - Starting up FastAPI server...
+2025-07-23 21:18:24,132 - rag_integration - INFO - Initializing RAG service...
+2025-07-23 21:18:24,865 - rag_integration - INFO - Connected to MongoDB Atlas
+2025-07-23 21:18:24,883 - rag_integration - INFO - Found 7 documents in test_db.voxis_ai
+2025-07-23 21:18:24,884 - rag_integration - INFO - RAG service initialized successfully
+2025-07-23 21:18:24,884 - server - INFO - RAG service initialized successfully
+2025-07-23 21:18:27,638 - server - INFO - Client connected to WebSocket
+2025-07-23 21:18:27,639 - server - INFO - Connecting to Gemini Live API...
+2025-07-23 21:18:34,023 - server - INFO - Client disconnected normally
+2025-07-23 21:18:34,257 - server - INFO - Disconnected from Gemini
+2025-07-23 21:18:34,257 - server - INFO - Client connection cleaned up
+2025-07-23 21:18:36,814 - server - INFO - Client connected to WebSocket
+2025-07-23 21:18:36,814 - server - INFO - Connecting to Gemini Live API...
+2025-07-23 21:18:57,310 - rag_integration - INFO - Processing RAG query: Mori Pines
+2025-07-23 21:19:13,149 - rag_integration - INFO - RAG query processed successfully, found 5 relevant sources
+2025-07-23 21:19:32,387 - rag_integration - INFO - Processing RAG query: Mori Pines
+2025-07-23 21:19:34,212 - rag_integration - INFO - RAG query processed successfully, found 5 relevant sources
+2025-07-23 21:19:44,649 - server - INFO - Client disconnected normally
+2025-07-23 21:19:44,990 - server - INFO - Disconnected from Gemini
+2025-07-23 21:19:44,991 - server - INFO - Client connection cleaned up
+2025-07-23 21:19:45,054 - server - INFO - Shutting down FastAPI server...
+2025-07-23 21:19:45,076 - rag_integration - INFO - MongoDB connection closed
