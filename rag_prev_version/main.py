@@ -31,6 +31,9 @@ from VertexRagSystem.rag_class import VertexRAGSystem, RAGConfig
 # Import the new Gemini Live system
 from gemini_live_websocket import GeminiLiveManager, GeminiLiveConfig, get_gemini_live_manager
 
+# Import the simple WebSocket implementation
+from simple_websocket_endpoint import handle_simple_gemini_websocket
+
 app = FastAPI()
 
 app.add_middleware(
@@ -400,6 +403,14 @@ async def gemini_live_websocket(websocket: WebSocket, call_session_id: int):
             db.close()
         
         print("✅ Gemini Live session cleanup completed")
+
+@app.websocket("/simple-stt/{call_session_id}")
+async def simple_gemini_websocket(websocket: WebSocket, call_session_id: int):
+    """
+    Simple WebSocket endpoint for Gemini Live using direct Google AI API connection
+    This is a simplified version that bypasses Vertex AI complexity
+    """
+    await handle_simple_gemini_websocket(websocket, call_session_id)
 
 @app.get("/test-rag")
 async def test_rag_endpoint():
