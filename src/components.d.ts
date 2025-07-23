@@ -10,10 +10,13 @@ declare module 'vue' {
   export interface GlobalComponents {
     AppFooter: typeof import('./components/AppFooter.vue')['default']
     Appointment: typeof import('./components/Appointment.vue')['default']
+    CallTimer: typeof import('./components/CallTimer.vue')['default']
+    CallTranscript: typeof import('./components/CallTranscript.vue')['default']
     Chat: typeof import('./components/Chat.vue')['default']
     DancingBlob: typeof import('./components/DancingBlob.vue')['default']
     DashboardCard: typeof import('./components/DashboardCard.vue')['default']
     DeepChat: typeof import('./components/DeepChat.vue')['default']
+    GeminiLive: typeof import('./components/GeminiLive.vue')['default']
     Header: typeof import('./components/Header.vue')['default']
     HeaderBar: typeof import('./components/HeaderBar.vue')['default']
     HelloWorld: typeof import('./components/HelloWorld.vue')['default']

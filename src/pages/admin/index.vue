@@ -292,7 +292,7 @@
 import { ref, onMounted, computed } from "vue";
 import { useRoute } from "vue-router";
 import axios from "axios";
-import { useCallStore } from "@/stores/call";
+import { useCallStore } from "@/stores/call_prev";
 import { Plus, ListFilter } from "lucide-vue-next";
 
 const tab = ref("sum");

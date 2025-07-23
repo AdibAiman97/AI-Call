@@ -83,7 +83,7 @@
 
 <script setup>
 import { ref, onMounted } from "vue";
-import { useCallStore } from "../../stores/call";
+import { useCallStore } from "../../stores/call_prev";
 
 const summaryList = ref([]);
 const customerNextSteps = ref([]);

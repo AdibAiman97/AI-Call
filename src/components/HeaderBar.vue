@@ -7,10 +7,16 @@
         class="text-foreground mr-2 ms-0 ps-0"
         :size="40"
       ></v-app-bar-nav-icon>
-      <img width="120" src="../assets/voxis.png" alt="" @click="goHome" class="cursor-pointer" />
+      <img
+        width="120"
+        src="../assets/voxis.png"
+        alt=""
+        @click="goHome"
+        class="cursor-pointer"
+      />
     </template>
 
-    <template v-if="callStore.isInCall" v-slot:append>
+    <template v-if="callStore.isActive" v-slot:append>
       <div class="d-flex align-center ga-3 bg-success px-3 rounded-xl">
         <div class="d-flex align-center">
           <v-avatar size="10" color="#34D399"></v-avatar>
@@ -21,7 +27,7 @@
       </div>
     </template>
 
-    <template v-if="!callStore.isInCall" v-slot:append>
+    <template v-if="!callStore.isActive" v-slot:append>
       <v-btn
         @click="toggleUserRole"
         class="text-capitalize rounded-xl border-4 border-primary text-primary"
@@ -58,22 +64,23 @@ const isAdminRoute = computed(() => {
 });
 
 // Initialize currentUserRole based on isAdminRoute's initial value
-const currentUserRole = ref(isAdminRoute.value ? 'Admin' : 'Customer');
+const currentUserRole = ref(isAdminRoute.value ? "Admin" : "Customer");
 
 // Function to toggle the user role
 function toggleUserRole() {
-  currentUserRole.value = currentUserRole.value === 'Admin' ? 'Customer' : 'Admin';
-  console.log('User role switched to:', currentUserRole.value);
+  currentUserRole.value =
+    currentUserRole.value === "Admin" ? "Customer" : "Admin";
+  console.log("User role switched to:", currentUserRole.value);
 
-  if (currentUserRole.value === 'Admin') {
-    router.push('/admin');
+  if (currentUserRole.value === "Admin") {
+    router.push("/admin");
   } else {
-    router.push('/');
+    router.push("/");
   }
 }
 
 function goHome() {
-  router.push('/');
+  router.push("/");
 }
 </script>
 
