@@ -22,7 +22,16 @@
             </Suspense>
           </TresCanvas>
         </div> -->
-        <h1 class="d-flex align-center justify-center pt-2">AI Agent</h1>
+        <h1 class="d-flex align-center justify-center pt-2">
+          {{ callStore.status === 'connecting' ? 'Connecting to AI Agent...' : 'AI Agent' }}
+        </h1>
+        <div v-if="callStore.status === 'connecting'" class="connecting-indicator">
+          <div class="connecting-dots">
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+          </div>
+        </div>
       </div>
 
       <div class="mb-4">
@@ -402,8 +411,8 @@ onMounted(async () => {
     return;
   }
 
-  // Start the actual WebSocket connection
-  // This will be handled by the GeminiLive component
+  // Note: The actual WebSocket connection will be handled by the GeminiLive component
+  // which watches for status changes and starts when status is 'connecting'
 });
 
 onUnmounted(() => {
@@ -428,5 +437,48 @@ onUnmounted(() => {
 
 .dancing-blob-container canvas {
   background: transparent !important;
+}
+
+.connecting-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.connecting-dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+}
+
+.connecting-dots .dot {
+  width: 8px;
+  height: 8px;
+  background: #64ffda;
+  border-radius: 50%;
+  animation: dot-pulse 1.4s ease-in-out infinite both;
+}
+
+.connecting-dots .dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.connecting-dots .dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes dot-pulse {
+  0%,
+  80%,
+  100% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 </style>

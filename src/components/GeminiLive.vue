@@ -275,6 +275,7 @@ const setupWebSocket = (): Promise<void> => {
       console.log("WebSocket connected to FastAPI backend")
       callStore.connectCall()
 
+
       // Send initial greeting with longer delay
       setTimeout(() => {
         if (websocket && websocket.readyState === WebSocket.OPEN) {
