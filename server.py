@@ -162,25 +162,18 @@ def extract_text_response(input_msg: dict) -> str:
         if 'text' in part:
             raw_text = part['text']
             
-            # Early filter: reject obvious tool artifacts
+            # More aggressive filtering of tool artifacts
             if raw_text and any(pattern in raw_text.lower() for pattern in [
                 'tool_response', 'function_responses', 'string_value', 
                 '"id":', '"name":', '"response":', 'tool_outputs',
-                '```tool_outputs', '{"answer"'
+                '```tool_outputs', '{"answer"', '"answer":', 'tool_',
+                'function_', '```json', '"result":'
             ]):
-                print(f"🗑️ Filtering out text response containing tool artifacts")
+                print(f"🗑️ Filtering out text response containing tool artifacts: '{raw_text[:50]}...'")
                 return ""
             
-            # Basic cleaning at extraction level
-            if raw_text and '```tool_outputs' not in raw_text and '{"answer"' not in raw_text:
-                return raw_text
-            elif raw_text:
-                # Apply basic cleaning if artifacts detected
-                import re
-                cleaned = re.sub(r'```[\s\S]*?```', '', raw_text, flags=re.DOTALL)
-                cleaned = re.sub(r'\{[^}]*\}', '', cleaned)
-                cleaned = cleaned.strip()
-                return cleaned if cleaned else ""
+            # Return raw text for further cleaning by _clean_debug_artifacts
+            return raw_text if raw_text else ""
     return ""
 
 def save_audio_to_file(audio_data: bytes, config: AudioConfig, filename: str):
@@ -231,21 +224,23 @@ class GeminiLiveConnection:
             rag_function_declaration = {
                 "name": "search_knowledge_base", 
                 "description": """
-                CRITICAL MANDATORY FUNCTION: You MUST call this function for ANY property-related query.
+                MANDATORY FUNCTION - MUST BE CALLED FOR EVERY PROPERTY QUESTION
                 
-                TRIGGER WORDS (ALWAYS call function when user mentions ANY of these):
-                - Properties, property, project, projects, development, developments
-                - Houses, house, apartments, apartment, homes, home
-                - Gamuda, Cove, Mori, Pines, Enso, Woods, Palma, Sands, Clove
-                - Pricing, price, cost, budget, affordable
-                - Amenities, facilities, features
-                - What do you have, what projects, what properties
-                - Available, options, choices
-                - Township, estate, residential
+                WHEN TO CALL (100% of the time for these scenarios):
+                1. ANY mention of property names: Mori Pines, Gamuda Cove, Enso Woods, etc.
+                2. ANY pricing/cost questions: "How much", "price", "budget", "affordable"
+                3. ANY property features: amenities, layouts, specifications, facilities
+                4. ANY general inquiries: "what properties", "what do you have", "available options"
+                5. ANY comparisons between properties or developments
+                6. ANY factual questions about real estate projects
                 
-                NEVER say 'I don't have information' or 'let me check' - ALWAYS call this function first.
-                NEVER make assumptions - ALWAYS search the knowledge base.
-                The knowledge base contains comprehensive property information.""",
+                STRICT COMPLIANCE RULES:
+                - This function returns the ONLY facts you may use in your response
+                - NEVER create specific details not in the returned text
+                - If return says "3 to 5 bedrooms" - say exactly that, not "4 bedrooms"
+                - If return says "1,785 to 2,973 sq ft" - use that range, not specific numbers
+                - Rephrase naturally but add ZERO additional facts or specifications
+                - Your response authority comes 100% from this function result""",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -311,10 +306,10 @@ class GeminiLiveConnection:
                             - Use the schedule_appointment function when customers want to book a viewing
 
                             CONVERSATION FLOW:
-                            1. Greet customers warmly and introduce yourself
-                            2. Ask how you can help them today
-                            3. Listen to their needs and use the property database to provide relevant information
-                            4. Guide them toward booking an appointment to visit the sales gallery
+                            1. When prompted to greet, provide a warm welcome as Gina from Gamuda Cove sales gallery
+                            2. For property questions, immediately search the knowledge base and provide specific information
+                            3. Focus on answering the user's specific questions with detailed property information  
+                            4. Guide them toward booking an appointment after providing the requested information
 
                             APPOINTMENT BOOKING PROCESS:
                             When customers show interest, gather:
@@ -324,27 +319,28 @@ class GeminiLiveConnection:
                             4. Preferred appointment time
                             5. Contact phone number
 
-                            CRITICAL KNOWLEDGE BASE RULES:
-                            ALWAYS search the knowledge base when ANY property-related information is mentioned:
-                            - ANY mention of specific properties, projects, or developments
-                            - ANY pricing, costs, or financial information questions
-                            - ANY property features, layouts, or specifications questions
-                            - ANY amenities, facilities, or community features questions
-                            - ANY comparisons between properties
-                            - ANY factual questions about real estate
-                            - ANY questions about availability, floor plans, or technical details
-                            - Property names like: "Mori Pines", "Gamuda Cove", "Enso Woods", etc.
+                            MANDATORY KNOWLEDGE BASE USAGE:
+                            You MUST use the search_knowledge_base function for EVERY property-related query, even if you think you know the answer. This includes:
+                            - ANY mention of specific properties: "Mori Pines", "Gamuda Cove", "Enso Woods", etc.
+                            - ANY pricing, cost, or budget questions
+                            - ANY property features, layouts, amenities, or specifications
+                            - ANY comparisons between properties or projects
+                            - ANY general questions about "what properties do you have"
+                            - ANY questions about availability, floor plans, or details
+                            - ANY real estate or property-related information requests
 
-                            IMPORTANT RULES:
-                            - NEVER say "I don't have information" or "I don't know"
-                            - Always use the search_knowledge_base function to find relevant information
-                            - If specific details aren't available, redirect to appointment booking
-                            - Convert all numbers to words in speech (e.g., "two thousand" not "2000")
-                            - Keep responses under 50 words for natural conversation flow
-                            - When customers provide appointment details, immediately use schedule_appointment function
-                            - NEVER mention searching, tools, functions, or knowledge base in responses
-                            - Present all information naturally as if it's your own knowledge
-                            - NEVER include debug information or technical details in spoken responses
+                            CRITICAL ANTI-HALLUCINATION RULES:
+                            - FORBIDDEN: Creating specific details not in function response
+                            - FORBIDDEN: Adding bedroom counts, bathroom counts, lot sizes not provided
+                            - FORBIDDEN: Mixing function data with your knowledge
+                            - MANDATORY: Use ONLY the exact information returned by search_knowledge_base
+                            - MANDATORY: If function says "1,785 sq ft to 2,973 sq ft" - use that range, don't pick specific numbers
+                            - MANDATORY: If function says "3 to 5 bedrooms" - use that range, don't specify exact counts
+                            - Your response must contain ZERO information not explicitly in the function result
+                            - Rephrase function content naturally but change NO facts, add NO details
+                            - If unsure about any detail, don't include it - only use what's explicitly provided
+                            - Convert numbers to words for speech but keep the same values/ranges
+                            - Present as conversational but stick to facts provided
                             """
                 }]
             }
@@ -386,9 +382,10 @@ class GeminiLiveConnection:
             
             # Send initial greeting to trigger Gina's response (only once)
             if not self._initial_greeting_sent:
-                initial_greeting = "Hello"
-                await self.send_text_to_gemini(initial_greeting)
-                print(f"👋 Sent initial greeting to trigger Gina's response")
+                # Send a simple prompt to trigger AI greeting without user input
+                initial_prompt = "Please greet the customer as Gina from Gamuda Cove sales gallery."
+                await self.send_text_to_gemini(initial_prompt)
+                print(f"👋 Sent greeting prompt to trigger Gina's welcome message")
                 self._initial_greeting_sent = True
             
             # Wait a moment for any immediate responses
@@ -505,14 +502,20 @@ class GeminiLiveConnection:
                                 try:
                                     text_content = text_parts[0]['text']
                                     
-                                    text_preview = text_content[:60] + ('...' if len(text_content) > 60 else '')
-                                    print(f"📨 Gemini text: \"{text_preview}\"")
+                                    # Clean the text content to remove tool artifacts
+                                    cleaned_content = self._clean_debug_artifacts(text_content)
                                     
-                                    # Send text to frontend directly (no filtering needed)
-                                    await self.client_ws.send_json({
-                                        "type": "text",
-                                        "content": text_content
-                                    })
+                                    if cleaned_content and cleaned_content.strip():
+                                        text_preview = cleaned_content[:60] + ('...' if len(cleaned_content) > 60 else '')
+                                        print(f"📨 Gemini text (cleaned): \"{text_preview}\"")
+                                        
+                                        # Send cleaned text to frontend
+                                        await self.client_ws.send_json({
+                                            "type": "text",
+                                            "content": cleaned_content
+                                        })
+                                    else:
+                                        print(f"🗑️ Filtered out text response containing only tool artifacts")
                                 finally:
                                     self._processing_response = False
                             
@@ -893,7 +896,7 @@ class GeminiLiveConnection:
                         result_text = "I don't have specific information about that."
                         print(f"📚 No RAG answer found")
                     
-                    # Send ONLY the clean text as function response - NO JSON structures
+                    # Send ONLY the clean text as function response with explicit instruction
                     function_response = {
                         "tool_response": {
                             "function_responses": [{
@@ -1036,79 +1039,92 @@ class GeminiLiveConnection:
         if not text or not text.strip():
             return ""
         
-        # Remove common debug patterns
+        original_text = text
         cleaned = text.strip()
+        
+        # Early rejection of responses that are mostly tool artifacts
+        if any(pattern in cleaned.lower() for pattern in [
+            'tool_outputs', 'function_responses', 'tool_response', '```tool_outputs',
+            '"answer":', '{"answer"', '"id":', '"name":', '"response":', "{'answer':",
+            'tool_', '```json', '{"', "{'", "answer':"
+        ]):
+            # Check if there's any meaningful content after removing artifacts
+            temp_cleaned = re.sub(r'```[\s\S]*?```', '', cleaned, flags=re.DOTALL)
+            temp_cleaned = re.sub(r'\{.*?\}', '', temp_cleaned, flags=re.DOTALL)
+            temp_cleaned = temp_cleaned.strip()
+            
+            # If almost nothing remains, reject the entire response
+            if len(temp_cleaned) < 10:
+                print(f"🗑️ Rejecting response that's mostly tool artifacts: '{cleaned[:50]}...'")
+                return ""
         
         # Remove all code blocks (including tool_outputs)
         cleaned = re.sub(r'```[\s\S]*?```', '', cleaned, flags=re.DOTALL)
         
-        # Remove any remaining tool_outputs sections (with or without backticks)
-        cleaned = re.sub(r'tool_outputs[\s\S]*?}', '', cleaned, flags=re.DOTALL)
-        cleaned = re.sub(r'tool_outputs.*', '', cleaned, flags=re.IGNORECASE)
+        # Remove tool_outputs patterns more aggressively
+        cleaned = re.sub(r'tool_outputs[\s\S]*', '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+        cleaned = re.sub(r'tool[\s_]outputs[\s\S]*', '', cleaned, flags=re.IGNORECASE | re.DOTALL)
         
-        # Remove tool_response structures completely
-        cleaned = re.sub(r'tool_response.*?}}}', '', cleaned, flags=re.DOTALL)
-        cleaned = re.sub(r'\{"tool_response"[\s\S]*?\}', '', cleaned, flags=re.DOTALL)
+        # Remove tool_response and function_responses structures
+        cleaned = re.sub(r'tool_response[\s\S]*', '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+        cleaned = re.sub(r'function_responses[\s\S]*', '', cleaned, flags=re.IGNORECASE | re.DOTALL)
         
-        # Remove function_responses structures
-        cleaned = re.sub(r'function_responses[\s\S]*?}', '', cleaned, flags=re.DOTALL)
-        cleaned = re.sub(r'\{"function_responses"[\s\S]*?\}', '', cleaned, flags=re.DOTALL)
+        # Remove JSON structures completely - be more aggressive
+        cleaned = re.sub(r'\{[\s\S]*?\}', '', cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r'\[[\s\S]*?\]', '', cleaned, flags=re.DOTALL)
         
-        # Remove JSON answer structures - comprehensive patterns
-        cleaned = re.sub(r'\{\s*["\']?answer["\']?\s*:\s*["\']([^"\']*)["\']?\s*\}', r'\1', cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r'\{\s*answer\s*:\s*["\']([^"\']*)["\']?\s*\}', r'\1', cleaned, flags=re.IGNORECASE)
-        
-        # Remove any JSON-like structures more aggressively
-        cleaned = re.sub(r'\{[^{}]*?["\'][^{}]*?["\'][^{}]*?\}', '', cleaned)
-        cleaned = re.sub(r'\{.*?\}', '', cleaned, flags=re.DOTALL)
-        
-        # Remove square brackets with content
-        cleaned = re.sub(r'\[[^\]]*\]', '', cleaned)
-        
-        # Remove any remaining backticks
+        # Remove any remaining backticks and quotes
         cleaned = re.sub(r'`+', '', cleaned)
+        cleaned = re.sub(r'"+', '', cleaned)
+        cleaned = re.sub(r"'+", '', cleaned)
         
-        # Remove 'hits:' patterns and other technical terms
-        cleaned = re.sub(r'hits\s*:', '', cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r'string_value\s*:', '', cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r'result\s*:', '', cleaned, flags=re.IGNORECASE)
+        # Remove technical terms and patterns
+        technical_patterns = [
+            r'hits\s*:.*',
+            r'string_value\s*:.*',
+            r'result\s*:.*',
+            r'according to.*',
+            r'based on.*',
+            r'the documents? show.*',
+            r'the information indicates.*',
+            r'id\s*:.*',
+            r'name\s*:.*',
+            r'response\s*:.*'
+        ]
         
-        # Remove common technical artifacts
-        cleaned = re.sub(r'according to\s*', '', cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r'based on\s*', '', cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r'the documents show\s*', '', cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r'the information indicates\s*', '', cleaned, flags=re.IGNORECASE)
+        for pattern in technical_patterns:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE | re.DOTALL)
         
-        # Remove any lines that start with common JSON keys
+        # Clean up lines that look like JSON keys
         lines = cleaned.split('\n')
         clean_lines = []
         for line in lines:
             line = line.strip()
-            if not re.match(r'^["\']?(id|name|response|result|string_value|function_responses|tool_response)["\']?\s*:', line, re.IGNORECASE):
+            # Skip lines that look like JSON keys or are too short
+            if (len(line) > 3 and 
+                not re.match(r'^["\']?[\w_]+["\']?\s*:', line) and
+                not re.match(r'^[\{\[\}\]]+$', line)):
                 clean_lines.append(line)
-        cleaned = '\n'.join(clean_lines)
         
-        # Clean up extra whitespace and newlines
+        cleaned = ' '.join(clean_lines)
+        
+        # Final whitespace cleanup
         cleaned = re.sub(r'\s+', ' ', cleaned)
         cleaned = cleaned.strip()
         
-        # Remove empty parentheses or brackets
-        cleaned = re.sub(r'\(\s*\)', '', cleaned)
-        cleaned = re.sub(r'\[\s*\]', '', cleaned)
-        cleaned = re.sub(r'\{\s*\}', '', cleaned)
-        
-        # Remove any remaining quotes at the beginning or end
-        cleaned = re.sub(r'^["\']|["\']$', '', cleaned)
-        
-        # Final cleanup
+        # Remove remaining artifacts
+        cleaned = re.sub(r'^["\'\{\[\}\]]+|["\'\{\[\}\]]+$', '', cleaned)
         cleaned = cleaned.strip()
         
-        if cleaned != text and cleaned:
-            print(f"🧹 Cleaned debug artifacts:")
-            print(f"   Before: {text[:100]}...")
-            print(f"   After:  {cleaned[:100]}...")
+        # Log cleaning if significant changes were made
+        if cleaned != original_text and len(cleaned) > 0:
+            print(f"🧹 Cleaned response:")
+            print(f"   Original: '{original_text[:80]}{'...' if len(original_text) > 80 else ''}' ({len(original_text)} chars)")
+            print(f"   Cleaned:  '{cleaned[:80]}{'...' if len(cleaned) > 80 else ''}' ({len(cleaned)} chars)")
+        elif len(cleaned) == 0 and len(original_text) > 0:
+            print(f"🗑️ Completely filtered out response: '{original_text[:50]}...'")
         
-        return cleaned if cleaned else ""
+        return cleaned if cleaned and len(cleaned) > 3 else ""
     
     async def _generate_user_transcript(self):
         """Generate transcript from accumulated user audio buffer."""
