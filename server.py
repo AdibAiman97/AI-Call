@@ -160,7 +160,27 @@ def extract_text_response(input_msg: dict) -> str:
     content = content_input.get('modelTurn', {})
     for part in content.get('parts', []):
         if 'text' in part:
-            return part['text']
+            raw_text = part['text']
+            
+            # Early filter: reject obvious tool artifacts
+            if raw_text and any(pattern in raw_text.lower() for pattern in [
+                'tool_response', 'function_responses', 'string_value', 
+                '"id":', '"name":', '"response":', 'tool_outputs',
+                '```tool_outputs', '{"answer"'
+            ]):
+                print(f"🗑️ Filtering out text response containing tool artifacts")
+                return ""
+            
+            # Basic cleaning at extraction level
+            if raw_text and '```tool_outputs' not in raw_text and '{"answer"' not in raw_text:
+                return raw_text
+            elif raw_text:
+                # Apply basic cleaning if artifacts detected
+                import re
+                cleaned = re.sub(r'```[\s\S]*?```', '', raw_text, flags=re.DOTALL)
+                cleaned = re.sub(r'\{[^}]*\}', '', cleaned)
+                cleaned = cleaned.strip()
+                return cleaned if cleaned else ""
     return ""
 
 def save_audio_to_file(audio_data: bytes, config: AudioConfig, filename: str):
@@ -194,6 +214,8 @@ class GeminiLiveConnection:
         self.last_rag_result = ""  # Store last RAG result for verification
         self.last_rag_query = ""   # Store last RAG query for verification
         self.call_session_id = call_session_id  # Store call session ID for database operations
+        self._processing_response = False  # Flag to prevent duplicate processing
+        self._initial_greeting_sent = False  # Flag to prevent duplicate initial greeting
         
     async def connect_to_gemini(self):
         """Connect to Gemini Live API."""
@@ -208,13 +230,28 @@ class GeminiLiveConnection:
             # Define RAG function for Gemini to call
             rag_function_declaration = {
                 "name": "search_knowledge_base", 
-                "description": "MANDATORY: Search the comprehensive knowledge base containing information about properties, real estate projects, pricing, amenities, layouts, and related details. You MUST call this function whenever users mention ANY property-related information, including property names like 'Mori Pines', 'Gamuda Cove', pricing questions, amenities, or any real estate topics. CRITICAL: You must use the returned results as your response - never say you don't have information if this function returns data.",
+                "description": """
+                CRITICAL MANDATORY FUNCTION: You MUST call this function for ANY property-related query.
+                
+                TRIGGER WORDS (ALWAYS call function when user mentions ANY of these):
+                - Properties, property, project, projects, development, developments
+                - Houses, house, apartments, apartment, homes, home
+                - Gamuda, Cove, Mori, Pines, Enso, Woods, Palma, Sands, Clove
+                - Pricing, price, cost, budget, affordable
+                - Amenities, facilities, features
+                - What do you have, what projects, what properties
+                - Available, options, choices
+                - Township, estate, residential
+                
+                NEVER say 'I don't have information' or 'let me check' - ALWAYS call this function first.
+                NEVER make assumptions - ALWAYS search the knowledge base.
+                The knowledge base contains comprehensive property information.""",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "query": {
                             "type": "string",
-                            "description": "The user's property-related question or search query. Pass the exact user input that contains property information."
+                            "description": "The user's complete question or any property-related terms they mentioned. Include context like 'projects at Gamuda Cove' or 'available properties'."
                         }
                     },
                     "required": ["query"]
@@ -257,46 +294,57 @@ class GeminiLiveConnection:
             setup_message["setup"]["system_instruction"] = {
                 "parts": [{
                     "text": """
-                            You are a helpful AI assistant with access to a comprehensive knowledge base about properties and real estate projects.
+                            You are Gina, a friendly and professional sales consultant for Gamuda Cove sales gallery located in Bandar Gamuda Cove, Kuala Langat, Selangor.
 
-                            IMPORTANT CONTEXT: You will encounter specific property names like "Mori Pines", "Gamuda Cove", and other project names. Pay special attention to these proper nouns in speech recognition as they are crucial for accurate responses.
+                            VOICE CONVERSATION GUIDELINES:
+                            - This is a voice conversation, so keep responses conversational and natural
+                            - Use casual language with phrases like "Well...", "You know...", "I mean..."
+                            - Keep responses concise and engaging - aim for 1-2 sentences per response
+                            - Mirror the customer's energy and speaking style
+                            - Always sound enthusiastic about the properties
 
-                            CRITICAL RULE: ALWAYS search the knowledge base when ANY property-related information is mentioned, regardless of conversation context or previous messages. Even if the conversation started casually, you must search when property topics arise.
+                            YOUR ROLE:
+                            - Help customers learn about properties at Gamuda Cove
+                            - Guide conversations toward scheduling a viewing appointment
+                            - Answer questions about townships, property details, pricing, and amenities
+                            - Use the query_property_database function to get specific property information
+                            - Use the schedule_appointment function when customers want to book a viewing
 
-                            WHEN TO SEARCH (MANDATORY - ignore conversation context):
-                            - ANY mention of specific properties, projects, or developments (even if you're not sure they exist)
+                            CONVERSATION FLOW:
+                            1. Greet customers warmly and introduce yourself
+                            2. Ask how you can help them today
+                            3. Listen to their needs and use the property database to provide relevant information
+                            4. Guide them toward booking an appointment to visit the sales gallery
+
+                            APPOINTMENT BOOKING PROCESS:
+                            When customers show interest, gather:
+                            1. Their full name
+                            2. Property type preference (Semi-detached, Terrace, Bungalow, Apartments)
+                            3. Purpose of purchase (investment, own stay, family)
+                            4. Preferred appointment time
+                            5. Contact phone number
+
+                            CRITICAL KNOWLEDGE BASE RULES:
+                            ALWAYS search the knowledge base when ANY property-related information is mentioned:
+                            - ANY mention of specific properties, projects, or developments
                             - ANY pricing, costs, or financial information questions
                             - ANY property features, layouts, or specifications questions
                             - ANY amenities, facilities, or community features questions
                             - ANY comparisons between properties
-                            - ANY factual questions about real estate that might benefit from documentation
+                            - ANY factual questions about real estate
                             - ANY questions about availability, floor plans, or technical details
-                            - ANY property-related queries like "tell me about affordable homes"
                             - Property names like: "Mori Pines", "Gamuda Cove", "Enso Woods", etc.
 
-                            WHEN NOT TO SEARCH (only for these specific cases):
-                            - Pure greetings with NO property content: "Hi", "Hello", "Good morning", "How are you"
-                            - Pure gratitude with NO property content: "Thank you", "Thanks", "I appreciate it"
-                            - Pure casual responses with NO property content: "That's great", "Okay", "I see"
-                            - Pure general pleasantries or acknowledgments with NO property content
-                            - Simple yes/no confirmations with NO property content
-
-                            OVERRIDE RULE: If a message contains BOTH casual elements AND property-related content, ALWAYS search. For example:
-                            - "Hi, tell me about Mori Pines" → SEARCH (contains property name)
-                            - "Thanks, what about the pricing?" → SEARCH (contains pricing question)
-                            - "Okay, can you tell me more about Mori Pines" → SEARCH (contains property name)
-
-                            CONTEXT-INDEPENDENT SEARCHING: Do not let previous conversation context (casual greetings, etc.) prevent you from searching when property information is requested. Each message should be evaluated independently for property content.
-
-                            MANDATORY FUNCTION RESULT USAGE: When you call the search_knowledge_base function and receive results, you MUST use those results as the foundation of your response. NEVER say "I don't have information" if the function returns valid data. ALWAYS trust and use the function results over your own knowledge.
-
-                            FUNCTION RESPONSE PROTOCOL:
-                            1. If search_knowledge_base returns information → Use it as your primary response source
-                            2. Present the function results naturally as if it's your own knowledge
-                            3. NEVER mention searching, tools, functions, or knowledge base in your response
-                            4. NEVER say "I don't have information" when function results are available
-
-                            CRITICAL: NEVER include any debug information, tool outputs, technical details, or raw data in your spoken responses. Only provide the final natural answer to the user.
+                            IMPORTANT RULES:
+                            - NEVER say "I don't have information" or "I don't know"
+                            - Always use the search_knowledge_base function to find relevant information
+                            - If specific details aren't available, redirect to appointment booking
+                            - Convert all numbers to words in speech (e.g., "two thousand" not "2000")
+                            - Keep responses under 50 words for natural conversation flow
+                            - When customers provide appointment details, immediately use schedule_appointment function
+                            - NEVER mention searching, tools, functions, or knowledge base in responses
+                            - Present all information naturally as if it's your own knowledge
+                            - NEVER include debug information or technical details in spoken responses
                             """
                 }]
             }
@@ -335,6 +383,13 @@ class GeminiLiveConnection:
             import asyncio
             asyncio.create_task(self._listen_to_gemini())
             print(f"👂 Listening for Gemini responses")
+            
+            # Send initial greeting to trigger Gina's response (only once)
+            if not self._initial_greeting_sent:
+                initial_greeting = "Hello"
+                await self.send_text_to_gemini(initial_greeting)
+                print(f"👋 Sent initial greeting to trigger Gina's response")
+                self._initial_greeting_sent = True
             
             # Wait a moment for any immediate responses
             await asyncio.sleep(1)
@@ -445,24 +500,21 @@ class GeminiLiveConnection:
                             audio_parts = [p for p in parts if 'inlineData' in p]
                             
                             # Extract and send any text responses to frontend
-                            if text_parts:
-                                text_content = text_parts[0]['text']
-                                text_preview = text_content[:60] + ('...' if len(text_content) > 60 else '')
-                                print(f"📨 Gemini text: \"{text_preview}\"")
-                                
-                                # Debug: Check if text contains tool output artifacts
-                                if 'tool_outputs' in text_content or 'hits' in text_content:
-                                    print(f"⚠️ FOUND DEBUG ARTIFACTS IN GEMINI TEXT: {text_content}")
-                                    print(f"⚠️ Full model turn: {json.dumps(model_turn, indent=2)}")
-                                
-                                # Clean any debug artifacts from the text
-                                cleaned_text = self._clean_debug_artifacts(text_content)
-                                
-                                # Send text to frontend for transcript
-                                await self.client_ws.send_json({
-                                    "type": "text",
-                                    "content": cleaned_text
-                                })
+                            if text_parts and not self._processing_response:
+                                self._processing_response = True
+                                try:
+                                    text_content = text_parts[0]['text']
+                                    
+                                    text_preview = text_content[:60] + ('...' if len(text_content) > 60 else '')
+                                    print(f"📨 Gemini text: \"{text_preview}\"")
+                                    
+                                    # Send text to frontend directly (no filtering needed)
+                                    await self.client_ws.send_json({
+                                        "type": "text",
+                                        "content": text_content
+                                    })
+                                finally:
+                                    self._processing_response = False
                             
                             if audio_parts:
                                 audio_size = len(audio_parts[0]['inlineData'].get('data', ''))
@@ -515,7 +567,7 @@ class GeminiLiveConnection:
                         print(f"👤 Chunk length: {len(text_content)}, Buffer length: {len(self.user_transcript_buffer)}")
                         
                         # Debug: Check if this chunk contains key words
-                        key_words = ['mori', 'pines', 'gamuda', 'cove']
+                        key_words = ['mori', 'pines', 'gamuda', 'cove', 'property', 'project', 'development', 'township', 'estate', 'estate', 'budget']
                         for word in key_words:
                             if word in text_content.lower():
                                 print(f"🎯 FOUND KEY WORD '{word}' in transcript chunk: \"{text_content}\"")
@@ -598,6 +650,8 @@ class GeminiLiveConnection:
                             break
                     
                     if text_content:
+                        # No filtering needed - process all content
+                        
                         # Accumulate AI transcript chunks
                         self.ai_transcript_buffer += text_content
                         # print(f"🤖 AI transcript chunk: \"{text_content}\" (buffer: \"{self.ai_transcript_buffer}\")")
@@ -607,31 +661,39 @@ class GeminiLiveConnection:
                         if (text_content.endswith('.') or text_content.endswith('?') or 
                             text_content.endswith('!') or text_content.endswith('\n')):
                             
-                            if self.ai_transcript_buffer.strip():
-                                print(f"🤖 Sending complete AI transcript: \"{self.ai_transcript_buffer.strip()}\"")
-                                
-                                # Save AI transcript to database
+                            if self.ai_transcript_buffer.strip() and not self._processing_response:
+                                self._processing_response = True
                                 try:
-                                    db = next(get_db())
-                                    create_session_message(
-                                        db=db,
-                                        session_id=self.call_session_id,
-                                        message=self.ai_transcript_buffer.strip(),
-                                        message_by="AI"
-                                    )
-                                    print(f"💾 Saved AI transcript to database")
-                                except Exception as e:
-                                    print(f"❌ Error saving AI transcript to database: {e}")
+                                    # Get the complete transcript
+                                    transcript = self.ai_transcript_buffer.strip()
+                                    
+                                    print(f"🤖 Sending complete AI transcript: \"{transcript}\"")
+                                    
+                                    # Save AI transcript to database
+                                    try:
+                                        db = next(get_db())
+                                        create_session_message(
+                                            db=db,
+                                            session_id=self.call_session_id,
+                                            message=transcript,
+                                            message_by="AI"
+                                        )
+                                        print(f"💾 Saved AI transcript to database")
+                                    except Exception as e:
+                                        print(f"❌ Error saving AI transcript to database: {e}")
+                                    finally:
+                                        if db:
+                                            db.close()
+                                    
+                                    # Send to frontend
+                                    await self.client_ws.send_json({
+                                        "type": "text",
+                                        "content": transcript
+                                    })
+                                    
+                                    self.ai_transcript_buffer = ""  # Clear buffer
                                 finally:
-                                    if db:
-                                        db.close()
-                                
-                                # Send to frontend
-                                await self.client_ws.send_json({
-                                    "type": "text",
-                                    "content": self.ai_transcript_buffer.strip()
-                                })
-                                self.ai_transcript_buffer = ""  # Clear buffer
+                                    self._processing_response = False
                         
                         self.last_ai_transcript_time = time.time()
             
@@ -820,32 +882,18 @@ class GeminiLiveConnection:
                     
                     rag_result = await process_rag_query(query)
                     
-                    print(f"🔍 RAG raw result: {rag_result}")
-                    print(f"🔍 Sources count: {rag_result.get('sources_count', 'not found')}")
-                    print(f"🔍 Answer: {rag_result.get('answer', 'not found')}")
-                    
-                    # Format the response naturally (without mentioning "sources" or "tool")
+                    # Get clean answer text directly
                     answer_text = rag_result.get('answer', '').strip()
-                    sources_count = rag_result.get('sources_count', 0)
                     
                     if answer_text and answer_text != "I couldn't process your question.":
-                        # Use the RAG answer regardless of source count, as long as it's meaningful
-                        # Remove any potential technical language from the RAG response
-                        result_text = answer_text.replace("According to", "").replace("Based on", "").replace("The documents show", "").replace("The information indicates", "").strip()
-                        
-                        # Ensure the result is not too long and properly formatted for JSON
-                        if len(result_text) > 500:
-                            result_text = result_text[:500] + "..."
-                        
-                        # Clean any potential JSON-breaking characters
-                        result_text = result_text.replace('"', "'").replace('\n', ' ').replace('\r', ' ')
-                        
-                        print(f"📚 RAG result: {sources_count} sources found, using answer: '{result_text[:50]}...'")
+                        # Simple cleaning - just the basic text
+                        result_text = answer_text.replace("According to", "").replace("Based on", "").strip()
+                        print(f"📚 RAG result: '{result_text[:100]}...'")
                     else:
                         result_text = "I don't have specific information about that."
-                        print(f"📚 No meaningful RAG answer found")
+                        print(f"📚 No RAG answer found")
                     
-                    # Send function response back to Gemini (using exact Google format from reference)
+                    # Send ONLY the clean text as function response - NO JSON structures
                     function_response = {
                         "tool_response": {
                             "function_responses": [{
@@ -856,16 +904,12 @@ class GeminiLiveConnection:
                         }
                     }
                     
-                    print(f"📤 Sending RAG result to Gemini: '{result_text[:100]}...'")
-                    print(f"📤 Function response: {json.dumps(function_response)}")
-                    
-                    # Send function response to Gemini
+                    print(f"📤 Sending clean RAG result to Gemini")
                     await self.gemini_ws.send(json.dumps(function_response))
                     
-                    # Store the RAG result for potential verification
                     self.last_rag_result = result_text
                     self.last_rag_query = query
-                    print(f"✅ Function response sent, stored RAG result for verification")
+                    print(f"✅ Function response sent")
                     
                 else:
                     print(f"❓ Unknown function: {function_name}")
@@ -892,25 +936,33 @@ class GeminiLiveConnection:
                     }
                 })
             
-            # Handle text responses
+            # Handle text responses (avoid duplicate processing)
             if text_response := extract_text_response(msg_data):
-                # Clean the response before sending
-                cleaned_response = self._clean_debug_artifacts(text_response)
-                if cleaned_response:  # Only send if we have content after cleaning
-                    await self.client_ws.send_json({
-                        "type": "text",
-                        "content": cleaned_response
-                    })
+                if not self._processing_response:
+                    self._processing_response = True
+                    try:
+                        # Send response directly - no complex cleaning needed
+                        await self.client_ws.send_json({
+                            "type": "text",
+                            "content": text_response
+                        })
+                    finally:
+                        self._processing_response = False
             
             # Handle turn completion
             if 'turnComplete' in msg_data.get('serverContent', {}):
                 # Flush any remaining transcript buffers
                 if self.ai_transcript_buffer.strip():
-                    print(f"🤖 Flushing final AI transcript: \"{self.ai_transcript_buffer.strip()}\"")
-                    await self.client_ws.send_json({
-                        "type": "text",
-                        "content": self.ai_transcript_buffer.strip()
-                    })
+                    # Clean final transcript before flushing
+                    cleaned_final = self._clean_debug_artifacts(self.ai_transcript_buffer.strip())
+                    if cleaned_final:
+                        print(f"🤖 Flushing final AI transcript: \"{cleaned_final}\"")
+                        await self.client_ws.send_json({
+                            "type": "text",
+                            "content": cleaned_final
+                        })
+                    else:
+                        print(f"🗑️ Discarded final AI transcript after cleaning")
                     self.ai_transcript_buffer = ""
                 
                 if self.user_transcript_buffer.strip():
@@ -981,38 +1033,82 @@ class GeminiLiveConnection:
         """Remove debug artifacts from Gemini responses."""
         import re
         
+        if not text or not text.strip():
+            return ""
+        
         # Remove common debug patterns
-        cleaned = text
+        cleaned = text.strip()
         
-        # Remove tool_outputs code blocks
-        cleaned = re.sub(r'```tool_outputs\s*\n?.*?\n?```', '', cleaned, flags=re.DOTALL)
+        # Remove all code blocks (including tool_outputs)
+        cleaned = re.sub(r'```[\s\S]*?```', '', cleaned, flags=re.DOTALL)
         
-        # Remove JSON-like answer structures
-        cleaned = re.sub(r'\{"answer":\s*"([^"]+)"\}', r'\1', cleaned)
-        cleaned = re.sub(r'\{"answer":\s*"([^"]+)"\}', r'\1', cleaned)
+        # Remove any remaining tool_outputs sections (with or without backticks)
+        cleaned = re.sub(r'tool_outputs[\s\S]*?}', '', cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r'tool_outputs.*', '', cleaned, flags=re.IGNORECASE)
         
-        # Remove any remaining tool output patterns
-        cleaned = re.sub(r'tool_outputs\s*{[^}]*}', '', cleaned)
-        cleaned = re.sub(r'\{"hits":[^\}]*\}', '', cleaned)
+        # Remove tool_response structures completely
+        cleaned = re.sub(r'tool_response.*?}}}', '', cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r'\{"tool_response"[\s\S]*?\}', '', cleaned, flags=re.DOTALL)
         
-        # Remove any remaining backticks and code block markers
-        cleaned = re.sub(r'```[a-zA-Z]*\n?', '', cleaned)
-        cleaned = re.sub(r'```', '', cleaned)
+        # Remove function_responses structures
+        cleaned = re.sub(r'function_responses[\s\S]*?}', '', cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r'\{"function_responses"[\s\S]*?\}', '', cleaned, flags=re.DOTALL)
         
-        # Clean up any JSON artifacts
-        cleaned = re.sub(r'\{"[^"]+":"([^"]+)"\}', r'\1', cleaned)
-        cleaned = re.sub(r"{'[^']+':'([^']+)'}", r'\1', cleaned)
+        # Remove JSON answer structures - comprehensive patterns
+        cleaned = re.sub(r'\{\s*["\']?answer["\']?\s*:\s*["\']([^"\']*)["\']?\s*\}', r'\1', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'\{\s*answer\s*:\s*["\']([^"\']*)["\']?\s*\}', r'\1', cleaned, flags=re.IGNORECASE)
+        
+        # Remove any JSON-like structures more aggressively
+        cleaned = re.sub(r'\{[^{}]*?["\'][^{}]*?["\'][^{}]*?\}', '', cleaned)
+        cleaned = re.sub(r'\{.*?\}', '', cleaned, flags=re.DOTALL)
+        
+        # Remove square brackets with content
+        cleaned = re.sub(r'\[[^\]]*\]', '', cleaned)
+        
+        # Remove any remaining backticks
+        cleaned = re.sub(r'`+', '', cleaned)
+        
+        # Remove 'hits:' patterns and other technical terms
+        cleaned = re.sub(r'hits\s*:', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'string_value\s*:', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'result\s*:', '', cleaned, flags=re.IGNORECASE)
+        
+        # Remove common technical artifacts
+        cleaned = re.sub(r'according to\s*', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'based on\s*', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'the documents show\s*', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'the information indicates\s*', '', cleaned, flags=re.IGNORECASE)
+        
+        # Remove any lines that start with common JSON keys
+        lines = cleaned.split('\n')
+        clean_lines = []
+        for line in lines:
+            line = line.strip()
+            if not re.match(r'^["\']?(id|name|response|result|string_value|function_responses|tool_response)["\']?\s*:', line, re.IGNORECASE):
+                clean_lines.append(line)
+        cleaned = '\n'.join(clean_lines)
         
         # Clean up extra whitespace and newlines
         cleaned = re.sub(r'\s+', ' ', cleaned)
         cleaned = cleaned.strip()
         
-        if cleaned != text:
-            print(f"🧹 Cleaned debug artifacts from AI response:")
-            print(f"   Before: {text}")
-            print(f"   After:  {cleaned}")
+        # Remove empty parentheses or brackets
+        cleaned = re.sub(r'\(\s*\)', '', cleaned)
+        cleaned = re.sub(r'\[\s*\]', '', cleaned)
+        cleaned = re.sub(r'\{\s*\}', '', cleaned)
         
-        return cleaned
+        # Remove any remaining quotes at the beginning or end
+        cleaned = re.sub(r'^["\']|["\']$', '', cleaned)
+        
+        # Final cleanup
+        cleaned = cleaned.strip()
+        
+        if cleaned != text and cleaned:
+            print(f"🧹 Cleaned debug artifacts:")
+            print(f"   Before: {text[:100]}...")
+            print(f"   After:  {cleaned[:100]}...")
+        
+        return cleaned if cleaned else ""
     
     async def _generate_user_transcript(self):
         """Generate transcript from accumulated user audio buffer."""
