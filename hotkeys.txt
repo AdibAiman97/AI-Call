@@ -1,0 +1,19 @@
+Ctrl+Shift+G:
+
+*Initiates a call.
+*Ends an active call and navigates to the call summary.
+*Admin View: Accesses the appointment tab.
+
+Ctrl+Shift+B:
+
+*Returns to the homepage from the call summary.
+*Admin View: Accesses the summary tab.
+
+Ctrl+Shift+R: 
+*Toggles between User and Admin roles.
+
+Ctrl+Shift+D:
+*Navigates to the FAQ database.
+
+Ctrl+Shift+H: 
+*Admin View: Navigates to the Admin homepage.

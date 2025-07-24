@@ -35,9 +35,10 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useCallStore } from "../stores/call";
+import { useHotkey } from "@/utils/Hotkey";
 
 const callStore = useCallStore();
 
@@ -72,9 +73,12 @@ function toggleUserRole() {
   }
 }
 
+
+useHotkey('r', toggleUserRole, { shift: true, command: true })
 function goHome() {
   router.push('/');
 }
+
 </script>
 
 <style scoped>

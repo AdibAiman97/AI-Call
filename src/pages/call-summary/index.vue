@@ -1,9 +1,6 @@
 <template>
   <div class="d-flex justify-space-between align-center mb-2">
     <h1>Call Summary</h1>
-    <v-btn class="text-capitalize text-foreground">
-      <v-icon class="mr-2"> mdi-export </v-icon> Export
-    </v-btn>
   </div>
 
   <p class="text-foreground pb-2 mb-4" v-if="!loading && callSessionData">
@@ -82,6 +79,15 @@
 </template>
 
 <script setup>
+import { useHotkey } from '@/utils/Hotkey'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+useHotkey('b', () => {
+  console.log('back to homepage')
+  router.push('/')
+ }, { shift: true, command: true })
+
 import { ref, onMounted } from "vue";
 import { useCallStore } from "../../stores/call";
 

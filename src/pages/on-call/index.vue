@@ -67,6 +67,15 @@ import {
 // import { useRouter } from "vue-router";
 import { TresCanvas } from "@tresjs/core";
 import DancingBlob from "@/components/DancingBlob.vue";
+import { useHotkey } from '@/utils/Hotkey'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+
+useHotkey('g', () => {
+  console.log('call-summary')
+  router.push('/call-summary')
+}, { shift: true, command: true })
 
 const callStore = useCallStore();
 // const router = useRouter();
@@ -91,6 +100,8 @@ const formattedTime = computed(() => {
   const ss = String(elapsedSeconds.value % 60).padStart(2, "0");
   return `${hh}${mm}:${ss}`;
 });
+
+
 
 // Watch when the call starts/stops
 watch(

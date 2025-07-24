@@ -63,9 +63,16 @@
 <script lang="ts" setup>
 import { ref, onMounted, onUnmounted, nextTick } from "vue";
 import { useCallStore } from "@/stores/call";
-import { useRouter } from "vue-router";
+import { useHotkey } from '@/utils/Hotkey'
+import { useRouter } from 'vue-router'
 
 const callStore = useCallStore();
+const router = useRouter()
+useHotkey('g', () => {
+  console.log('start call hotkey')
+  callStore.startCall()
+  router.push('/on-call')
+}, { shift: true, command: true })
 
 // Create dynamic heights for soundwave columns
 const baseHeights = ref<number[]>([]);
