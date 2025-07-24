@@ -21,6 +21,14 @@ from rag_integration import rag_service, initialize_rag, process_rag_query, get_
 import io
 import tempfile
 
+# Import existing routers
+from api.customer_router import router as customer_router
+from api.call_session_router import router as call_session_router
+from api.transcript_router import router as transcript_router
+from api.appointment_router import router as appointment_router
+from api.property_router import router as property_router
+from api.pdf_router import router as pdf_router
+
 # Import database components
 from database.connection import engine, Base, get_db
 from services.call_session import CallSessionService
@@ -101,6 +109,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(customer_router)
+app.include_router(call_session_router)
+app.include_router(transcript_router)
+app.include_router(appointment_router)
+app.include_router(property_router)
+app.include_router(pdf_router)
 
 def encode_audio_input(data: bytes, config: AudioConfig) -> dict:
     """Build message with user input audio bytes."""
