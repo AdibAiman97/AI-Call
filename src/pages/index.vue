@@ -3,29 +3,18 @@
     <!-- Cube soundwave background -->
     <div class="soundwave-background">
       <div class="cube-soundwave">
-        <div 
-          v-for="i in 50" 
-          :key="i" 
-          class="soundwave-column"
-          :style="{ 
-            left: `${(i - 1) * 2}%`
-          }"
-        >
+        <div v-for="i in 50" :key="i" class="soundwave-column" :style="{
+          left: `${(i - 1) * 2}%`
+        }">
           <!-- All blocks with smooth animation -->
-          <div 
-            v-for="j in getTotalHeight(i)" 
-            :key="`block-${j}`" 
-            class="cube-block"
-            :class="{ 
-              'base-block': j <= getBaseHeight(i),
-              'animated-block': j > getBaseHeight(i)
-            }"
-            :style="{ 
+          <div v-for="j in getTotalHeight(i)" :key="`block-${j}`" class="cube-block" :class="{
+            'base-block': j <= getBaseHeight(i),
+            'animated-block': j > getBaseHeight(i)
+          }" :style="{
               bottom: `${(j - 1) * 22}px`,
               transitionDelay: `${j * 50}ms`,
               background: getBlockColor(j)
-            }"
-          ></div>
+            }" />
         </div>
       </div>
     </div>
@@ -33,24 +22,22 @@
     <v-row class="text-center mb-12 d-flex align-center position-relative">
       <v-col cols="12" class="slide-up mb-16 pb-16">
         <h1 class="text-h2 text-md-h1 font-weight-bold mb-3">
-          <span class="text-gradient">AI-Powered</span> Call Assistant
+          <div class="text-gradient">AI-Powered</div> Call Assistant
         </h1>
         <p class="text-subtitle-1 text-md-h6 mx-auto" style="max-width: 800px">
           Connect with our intelligent AI agents and speak just like you would
           with a human.
         </p>
         <div class="call-button-container mt-12">
-          <button
-            class="call-button"
-            @click="callStore.startCall(); $router.push('/on-call')"
-          >
+          <button class="call-button" @click="callStore.startCall(); $router.push('/on-call')">
             <div class="call-button-content">
               <div class="call-icon">
                 <svg viewBox="0 0 24 24" width="24" height="24">
-                  <path fill="currentColor" d="M6.62,10.79C8.06,13.62 10.38,15.94 13.21,17.38L15.41,15.18C15.69,14.9 16.08,14.82 16.43,14.93C17.55,15.3 18.75,15.5 20,15.5A1,1 0 0,1 21,16.5V20A1,1 0 0,1 20,21A17,17 0 0,1 3,4A1,1 0 0,1 4,3H7.5A1,1 0 0,1 8.5,4C8.5,5.25 8.7,6.45 9.07,7.57C9.18,7.92 9.1,8.31 8.82,8.59L6.62,10.79Z"/>
+                  <path fill="currentColor"
+                    d="M6.62,10.79C8.06,13.62 10.38,15.94 13.21,17.38L15.41,15.18C15.69,14.9 16.08,14.82 16.43,14.93C17.55,15.3 18.75,15.5 20,15.5A1,1 0 0,1 21,16.5V20A1,1 0 0,1 20,21A17,17 0 0,1 3,4A1,1 0 0,1 4,3H7.5A1,1 0 0,1 8.5,4C8.5,5.25 8.7,6.45 9.07,7.57C9.18,7.92 9.1,8.31 8.82,8.59L6.62,10.79Z" />
                 </svg>
               </div>
-              <span class="call-button-text">Start Call Now</span>
+              <span class="call-button-text"> Start Call </span><span>⌘G</span>
               <div class="call-button-pulse"></div>
             </div>
           </button>
@@ -72,7 +59,7 @@ useHotkey('g', () => {
   console.log('start call hotkey')
   callStore.startCall()
   router.push('/on-call')
-}, { shift: true, command: true })
+}, { shift: false, command: true })
 
 // Create dynamic heights for soundwave columns
 const baseHeights = ref<number[]>([]);
@@ -88,16 +75,16 @@ const getTotalHeight = (index: number) => {
 };
 
 const getBlockColor = (blockHeight: number) => {
-  // Interpolate between #64ffda (bottom) and #0ea5e9 (top)
+  // Interpolate between #64ffda (bottom) and #023E7D (top)
   // Assuming max height of 15 blocks
   const progress = Math.min((blockHeight - 1) / 14, 1); // 0 to 1
-  
+
   // Bottom color: #64ffda (100, 255, 218)
-  // Top color: #0ea5e9 (14, 165, 233)
-  const r = Math.round(100 + (14 - 100) * progress);
-  const g = Math.round(255 + (165 - 255) * progress);
-  const b = Math.round(218 + (233 - 218) * progress);
-  
+  // Top color: #023E7D (2, 62, 125)
+  const r = Math.round(100 + (2 - 100) * progress);
+  const g = Math.round(255 + (62 - 255) * progress);
+  const b = Math.round(218 + (125 - 218) * progress);
+
   return `rgb(${r}, ${g}, ${b})`;
 };
 
@@ -111,7 +98,7 @@ const animateToTarget = () => {
     }
     return current;
   });
-  
+
   // Continuously generate new targets for columns that reached their goal
   targetHeights.value = targetHeights.value.map((target, index) => {
     const current = currentHeights.value[index];
@@ -143,17 +130,17 @@ onMounted(async () => {
     staticBasePattern.push(patternValues[i % patternValues.length]);
   }
   baseHeights.value = staticBasePattern;
-  
+
   // Initialize current heights to base heights
   currentHeights.value = [...staticBasePattern];
-  
+
   // Initialize with random targets to start movement immediately
   const initialTargets = [];
   for (let i = 0; i < 50; i++) {
     initialTargets.push(Math.floor(Math.random() * 15) + 1); // Increased max height to 15
   }
   targetHeights.value = initialTargets;
-  
+
   // Animate blocks step by step
   setInterval(animateToTarget, 120); // Fast animation step
 });
@@ -227,7 +214,7 @@ onUnmounted(() => {
   position: absolute;
   width: 20px;
   height: 20px;
-  border: 1px solid rgba(100, 255, 218, 0.4);
+  border: 1px solid rgba(0, 0, 0, 0.4);
   border-radius: 3px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   transform-origin: bottom;
@@ -242,9 +229,9 @@ onUnmounted(() => {
 }
 
 .animated-block {
-  opacity: 0.9;
-  border: 1px solid rgba(100, 255, 218, 0.6);
-  box-shadow: 0 3px 6px rgba(100, 255, 218, 0.4);
+  opacity: 0.4;
+  border: 1px solid rgba(14, 55, 46, 0.219);
+  box-shadow: 0 3px 6px rgba(14, 55, 46, 0.4);
 }
 
 @keyframes block-appear {
@@ -252,6 +239,7 @@ onUnmounted(() => {
     opacity: 0;
     transform: translateY(10px) scaleY(0.7);
   }
+
   100% {
     opacity: inherit;
     transform: translateY(0) scaleY(1);
@@ -302,6 +290,7 @@ onUnmounted(() => {
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
   padding: 16px 32px;
   background: rgba(15, 23, 42, 0.9);
@@ -325,9 +314,12 @@ onUnmounted(() => {
 }
 
 @keyframes pulse-icon {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: scale(1);
   }
+
   50% {
     transform: scale(1.1);
   }
@@ -336,6 +328,7 @@ onUnmounted(() => {
 .call-button-text {
   position: relative;
   z-index: 1;
+  min-width: 150px;
 }
 
 .call-button-pulse {
@@ -356,6 +349,7 @@ onUnmounted(() => {
     transform: translate(-50%, -50%) scale(0);
     opacity: 1;
   }
+
   100% {
     transform: translate(-50%, -50%) scale(4);
     opacity: 0;
@@ -367,16 +361,16 @@ onUnmounted(() => {
     padding: 14px 24px;
     font-size: 1rem;
   }
-  
+
   .call-icon {
     width: 28px;
     height: 28px;
   }
-  
+
   .soundwave-column {
     width: 16px;
   }
-  
+
   .cube-block {
     width: 16px;
     height: 16px;

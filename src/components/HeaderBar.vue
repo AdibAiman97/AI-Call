@@ -49,6 +49,9 @@ const props = defineProps({
   },
 });
 
+// Add hotkey for menu toggle
+useHotkey('m', props.toggleDrawer, { shift: true, command: true })
+
 const route = useRoute();
 
 const router = useRouter();

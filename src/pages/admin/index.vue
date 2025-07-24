@@ -33,9 +33,9 @@
     </p>
 
     <v-tabs v-model="tab" class="text-primary mb-5">
-      <v-tab value="sum" class="text-capitalize text-h6 p-0 m-0">Summary</v-tab>
+      <v-tab value="sum" class="text-capitalize text-h6 p-0 m-0">Summary (⌘K)</v-tab>
       <v-tab value="app" class="text-capitalize text-h6 p-0 m-0"
-        >Appointment</v-tab
+        >Appointment (⌘L)</v-tab
       >
     </v-tabs>
 
@@ -287,28 +287,34 @@
 
 <script setup>
 import { ref, onMounted, computed } from "vue";
-import { useRoute } from "vue-router";
+import { useRouter } from "vue-router";
 import axios from "axios";
 import { useCallStore } from "@/stores/call";
 import { Plus, ListFilter } from "lucide-vue-next";
 import { useHotkey } from '@/utils/Hotkey'
 const tab = ref("sum");
 
-const route = useRoute();
+const router = useRouter()
+
+useHotkey('b', () => {
+  console.log('go to admin page')
+  router.push('/call-summary')
+ }, { shift: false, command: true })
+
 useHotkey(
-  "b",
+  "k",
   () => {
     tab.value = "sum";
   },
-  { shift: true, command: true }
+  { shift: false, command: true }
 );
 
 useHotkey(
-  "g",
+  "l",
   () => {
     tab.value = "app";
   },
-  { shift: true, command: true }
+  { shift: false, command: true }
 );
 const callStore = useCallStore();
 

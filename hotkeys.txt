@@ -17,3 +17,6 @@ Ctrl+Shift+D:
 
 Ctrl+Shift+H: 
 *Admin View: Navigates to the Admin homepage.
+
+Ctrl+Shift+M:
+*Toggles the menu drawer open/closed.

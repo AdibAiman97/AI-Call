@@ -2,8 +2,8 @@
   <div class="chat-container">
     <!-- Chat Header -->
     <div class="chat-header">
-      <v-icon class="me-2 text-black">mdi-robot</v-icon>
-      <span class="font-weight-medium text-black">Voice Assistant</span>
+      <v-icon class="me-2 text-white">mdi-robot</v-icon>
+      <span class="font-weight-medium text-white">Voice Assistant</span>
       <v-spacer></v-spacer>
       <v-chip 
         :color="messages.length > 0 ? 'success' : 'grey'" 
@@ -41,7 +41,7 @@
           <!-- AI Message -->
           <div v-else class="message-bubble ai-message">
             <div class="message-avatar">
-              <v-avatar size="32" color="primary">
+              <v-avatar size="32" color="surface">
                 <v-icon color="white">mdi-robot</v-icon>
               </v-avatar>
             </div>
@@ -107,7 +107,7 @@ onMounted(() => {
   height: 100%;
   width: 50%;
   max-height: 90vh;
-  border: 1px solid rgb(var(--v-theme-primary));
+  border: 1px solid rgb(var(--v-theme-surface));
   border-radius: 12px;
   overflow: hidden;
   background-color: rgb(var(--v-theme-surface));
@@ -117,7 +117,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   padding: 16px;
-  background-color: rgb(var(--v-theme-primary));
+  background-color: rgb(var(--v-theme-surface));
   border-bottom: 1px solid rgb(var(--v-theme-outline));
 }
 
@@ -163,8 +163,8 @@ onMounted(() => {
 }
 
 .user-message {
-  background-color: rgb(var(--v-theme-primary));
-  color: black;
+  background-color: rgb(var(--v-theme-surface));
+  color: white;
   border-radius: 18px 18px 4px 18px;
   padding: 12px 16px;
   margin-left: auto;

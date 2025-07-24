@@ -83,10 +83,10 @@ import { useHotkey } from '@/utils/Hotkey'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
-useHotkey('b', () => {
-  console.log('back to homepage')
-  router.push('/')
- }, { shift: true, command: true })
+useHotkey('a', () => {
+  console.log('go to admin page')
+  router.push('/admin')
+ }, { shift: false, command: true })
 
 import { ref, onMounted } from "vue";
 import { useCallStore } from "../../stores/call";

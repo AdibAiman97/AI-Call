@@ -75,7 +75,7 @@ const router = useRouter()
 useHotkey('g', () => {
   console.log('call-summary')
   router.push('/call-summary')
-}, { shift: true, command: true })
+}, { shift: false, command: true })
 
 const callStore = useCallStore();
 // const router = useRouter();

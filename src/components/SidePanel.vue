@@ -4,6 +4,7 @@
     :temporary="true"
     :disable-resize-watcher="true"
     v-if="isAdminRoute"
+    width="300"
   >
     <v-list-item-group class="pa-5 text-center">
       <v-list-item
@@ -53,10 +54,10 @@ const props = defineProps({
 });
 
 const menuItems = [
-  { id: 1, text: "Home", path: mdiViewDashboard, route: "/admin" },
+  { id: 1, text: "(⌘A) Home", path: mdiViewDashboard, route: "/admin" },
   {
     id: 2,
-    text: "FAQ Database",
+    text: "(⌘G) FAQ Database",
     path: mdiFrequentlyAskedQuestions,
     route: "/admin/faq-database", }, ];
 
@@ -66,19 +67,19 @@ function navigate(route) {
 }
 
 useHotkey(
-  "h",
+  "a",
   () => {
     navigate("/admin");
   },
-  { shift: true, command: true }
+  { shift: false, command: true }
 );
 
 useHotkey(
-  "d",
+  "g",
   () => {
     navigate("/admin/faq-database");
   },
-  { shift: true, command: true }
+  { shift: false, command: true }
 );
 
 function isActiveRoute(route) {
