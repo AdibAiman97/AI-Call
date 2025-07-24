@@ -54,10 +54,10 @@ const props = defineProps({
 });
 
 const menuItems = [
-  { id: 1, text: "(⌘A) Home", path: mdiViewDashboard, route: "/admin" },
+  { id: 1, text: "(⌘⇧A) Home", path: mdiViewDashboard, route: "/admin" },
   {
     id: 2,
-    text: "(⌘G) FAQ Database",
+    text: "(⌘⇧G) FAQ Database",
     path: mdiFrequentlyAskedQuestions,
     route: "/admin/faq-database", }, ];
 
@@ -71,7 +71,7 @@ useHotkey(
   () => {
     navigate("/admin");
   },
-  { shift: false, command: true }
+  { shift: true, command: true }
 );
 
 useHotkey(
@@ -79,7 +79,7 @@ useHotkey(
   () => {
     navigate("/admin/faq-database");
   },
-  { shift: false, command: true }
+  { shift: true, command: true }
 );
 
 function isActiveRoute(route) {

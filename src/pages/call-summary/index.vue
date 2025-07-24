@@ -88,8 +88,14 @@ useHotkey('a', () => {
   router.push('/admin')
  }, { shift: false, command: true })
 
+
+ useHotkey('b', () => {
+  console.log('go to home page')
+  router.push('/')
+ }, { shift: false, command: true })
+ 
 import { ref, onMounted } from "vue";
-import { useCallStore } from "../../stores/call";
+import { useCallStore } from "../../stores/call_prev";
 
 const summaryList = ref([]);
 const customerNextSteps = ref([]);

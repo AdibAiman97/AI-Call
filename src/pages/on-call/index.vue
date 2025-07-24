@@ -10,52 +10,65 @@
       </div> -->
 
       <div class="d-flex flex-column align-center justify-center">
-        <div class="dancing-blob-container">
+        <!-- DANCING BLOB -->
+        <!-- <div class="dancing-blob-container">
           <TresCanvas :alpha="true">
             <Suspense>
-              <DancingBlob 
-                :analyser="analyser" 
-                :dataArray="dataArray" 
+              <DancingBlob
+                :analyser="analyser"
+                :dataArray="dataArray"
                 :isAudioPlaying="callStore.isPlayingAudio"
               />
             </Suspense>
           </TresCanvas>
+        </div> -->
+        <h1 class="d-flex align-center justify-center pt-2">
+          {{ callStore.status === 'connecting' ? 'Connecting to AI Agent...' : 'AI Agent' }}
+        </h1>
+        <div v-if="callStore.status === 'connecting'" class="connecting-indicator">
+          <div class="connecting-dots">
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+          </div>
         </div>
-        <h1 class="d-flex align-center justify-center pt-2">AI Agent</h1>
       </div>
 
       <div class="mb-4">
-        <h1 class="d-flex align-center justify-center">{{ formattedTime }}</h1>
+        <h1 class="d-flex align-center justify-center">{{ displayTime }}</h1>
         <p>Call Duration</p>
       </div>
 
       <div class="d-flex align-center justify-center ga-8">
         <v-btn class="bg-foreground" size="70" rounded="circle">
           <v-icon>
-            <volume2 />
+            <Volume2 />
           </v-icon>
         </v-btn>
 
         <v-btn
-          @click="endCall()"
+          @click="endCall"
           to="/call-summary"
           class="bg-error"
           size="70"
           rounded="circle"
+          :loading="isEnding"
         >
-          <v-icon>
-            <phone color="white" />
+          <v-icon color="white">
+            <Phone />
           </v-icon>
         </v-btn>
       </div>
     </div>
     <Chat />
+    <!-- Hidden audio processing component -->
+    <GeminiLive ref="geminiLiveRef" />
   </div>
 </template>
 
-<script setup lang="ts">
+<!-- <script setup lang="ts">
 import { Volume2, Phone } from "lucide-vue-next";
-import { useCallStore } from "@/stores/call";
+import { useCallStore } from "@/stores/call_prev";
 import {
   onMounted,
   onUnmounted,
@@ -87,7 +100,12 @@ let timer = null as any;
 const analyser = ref<AnalyserNode | null>(null);
 const dataArray = ref<Uint8Array | null>(null);
 const audioContext = ref<AudioContext | null>(null);
-const audioSource = ref<MediaElementAudioSourceNode | AudioBufferSourceNode | MediaStreamAudioSourceNode | null>(null);
+const audioSource = ref<
+  | MediaElementAudioSourceNode
+  | AudioBufferSourceNode
+  | MediaStreamAudioSourceNode
+  | null
+>(null);
 
 const formattedTime = computed(() => {
   const hours = Math.floor(elapsedSeconds.value / 3600);
@@ -155,13 +173,14 @@ function connectToAudioElements() {
     if (!audioContext.value || !analyser.value) return;
 
     // Find any audio elements that might be playing TTS
-    const audioElements = document.querySelectorAll('audio');
-    
+    const audioElements = document.querySelectorAll("audio");
+
     audioElements.forEach((audio) => {
       if (!audio.paused && audio.currentTime > 0) {
         // This audio element is playing, connect it to our analyser
         if (!audioSource.value) {
-          audioSource.value = audioContext.value!.createMediaElementSource(audio);
+          audioSource.value =
+            audioContext.value!.createMediaElementSource(audio);
           audioSource.value.connect(analyser.value!);
           audioSource.value.connect(audioContext.value!.destination);
           console.log("✅ Connected audio analysis to playing audio element");
@@ -173,10 +192,12 @@ function connectToAudioElements() {
     if (!audioSource.value) {
       // If no audio elements found, try to get user media for analysis
       // This is a fallback for when audio is played through other means
-      navigator.mediaDevices.getUserMedia({ audio: true })
+      navigator.mediaDevices
+        .getUserMedia({ audio: true })
         .then((stream) => {
           if (audioContext.value && analyser.value && !audioSource.value) {
-            const mediaStreamSource = audioContext.value.createMediaStreamSource(stream);
+            const mediaStreamSource =
+              audioContext.value.createMediaStreamSource(stream);
             audioSource.value = mediaStreamSource;
             mediaStreamSource.connect(analyser.value);
             console.log("✅ Connected audio analysis to media stream");
@@ -203,34 +224,38 @@ function processGeminiAudioData(base64Data: string) {
     const binaryString = atob(base64Data);
     const arrayBuffer = new ArrayBuffer(binaryString.length);
     const uint8Array = new Uint8Array(arrayBuffer);
-    
+
     for (let i = 0; i < binaryString.length; i++) {
       uint8Array[i] = binaryString.charCodeAt(i);
     }
 
     // Convert 16-bit PCM to AudioBuffer
     // Gemini Live: 16-bit PCM, 24kHz, Mono
-    const audioBuffer = audioContext.value.createBuffer(1, uint8Array.length / 2, 24000);
+    const audioBuffer = audioContext.value.createBuffer(
+      1,
+      uint8Array.length / 2,
+      24000
+    );
     const channelData = audioBuffer.getChannelData(0);
-    
+
     // Convert 16-bit PCM bytes to float32 samples
     for (let i = 0; i < channelData.length; i++) {
-      const sample = (uint8Array[i * 2] | (uint8Array[i * 2 + 1] << 8));
+      const sample = uint8Array[i * 2] | (uint8Array[i * 2 + 1] << 8);
       // Convert from 16-bit signed integer to float32 (-1 to 1)
-      channelData[i] = sample < 32768 ? sample / 32768 : (sample - 65536) / 32768;
+      channelData[i] =
+        sample < 32768 ? sample / 32768 : (sample - 65536) / 32768;
     }
 
     // Create and play audio buffer
     const bufferSource = audioContext.value.createBufferSource();
     bufferSource.buffer = audioBuffer;
-    
+
     // Connect to analyser for blob animation
     bufferSource.connect(analyser.value);
     bufferSource.connect(audioContext.value.destination);
-    
+
     bufferSource.start();
     console.log("✅ Playing Gemini Live audio with blob analysis");
-    
   } catch (error) {
     console.error("Error processing Gemini audio data:", error);
   }
@@ -287,6 +312,127 @@ onBeforeUnmount(() => {
     callStore.endCall();
   }
 });
+</script> -->
+
+<script lang="ts" setup>
+import { ref, computed, onMounted, onUnmounted } from "vue";
+import { useRouter } from "vue-router";
+import { useCallStore } from "@/stores/call";
+import { Volume2, Phone } from "lucide-vue-next";
+// import CallTimer from "@/components/CallTimer.vue";
+// import CallTranscript from "@/components/CallTranscript.vue";
+import GeminiLive from "../../components/GeminiLive.vue";
+
+const router = useRouter();
+const callStore = useCallStore();
+const transcriptRef = ref();
+const geminiLiveRef = ref();
+const isEnding = ref(false);
+const isProcessing = ref(false);
+
+const displayTime = computed(() => {
+  if (callStore.status === "idle") {
+    return "00:00";
+  }
+  return callStore.formattedDuration;
+});
+
+// Computed properties
+const statusTitle = computed(() => {
+  switch (callStore.status) {
+    case "connecting":
+      return "Connecting...";
+    case "connected":
+      return callStore.isMuted ? "Muted" : "Listening";
+    case "error":
+      return "Connection Error";
+    default:
+      return "Ready";
+  }
+});
+
+const statusSubtitle = computed(() => {
+  switch (callStore.status) {
+    case "connecting":
+      return "Setting up your voice connection";
+    case "connected":
+      return callStore.isMuted
+        ? "Microphone is muted"
+        : "Speak naturally to the assistant";
+    case "error":
+      return "Please try reconnecting";
+    default:
+      return "Voice assistant ready";
+  }
+});
+
+const visualizerIcon = computed(() => {
+  if (callStore.status === "error") return "mdi-microphone-off";
+  if (callStore.isMuted) return "mdi-microphone-off";
+  if (callStore.isRecording) return "mdi-microphone";
+  return "mdi-microphone-outline";
+});
+
+const visualizerIconColor = computed(() => {
+  if (callStore.status === "error") return "error";
+  if (callStore.isMuted) return "warning";
+  if (callStore.isActive) return "primary";
+  return "grey";
+});
+
+// Methods
+const toggleMute = () => {
+  callStore.toggleMute();
+};
+
+const endCall = async () => {
+  isEnding.value = true;
+
+  try {
+    // Stop the call
+    callStore.endCall();
+
+    // Navigate back to landing page
+    await router.push("/");
+  } catch (error) {
+    console.error("Error ending call:", error);
+  } finally {
+    isEnding.value = false;
+  }
+};
+
+const handleBackButton = async () => {
+  if (callStore.isActive) {
+    // Show confirmation dialog if call is active
+    const confirmed = confirm("Are you sure you want to end the call?");
+    if (!confirmed) return;
+  }
+
+  await endCall();
+};
+
+const clearTranscript = () => {
+  callStore.clearMessages();
+};
+
+// Lifecycle
+onMounted(async () => {
+  // If no call is in progress, redirect to landing page
+  if (callStore.status === "idle") {
+    await router.push("/");
+    return;
+  }
+
+  // Note: The actual WebSocket connection will be handled by the GeminiLive component
+  // which watches for status changes and starts when status is 'connecting'
+});
+
+onUnmounted(() => {
+  // Cleanup if needed
+});
+
+// Route guard to prevent direct access
+// This would typically be handled by Vue Router navigation guards
 </script>
 
 <style scoped>
@@ -303,5 +449,48 @@ onBeforeUnmount(() => {
 
 .dancing-blob-container canvas {
   background: transparent !important;
+}
+
+.connecting-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.connecting-dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+}
+
+.connecting-dots .dot {
+  width: 8px;
+  height: 8px;
+  background: #64ffda;
+  border-radius: 50%;
+  animation: dot-pulse 1.4s ease-in-out infinite both;
+}
+
+.connecting-dots .dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.connecting-dots .dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes dot-pulse {
+  0%,
+  80%,
+  100% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 </style>
