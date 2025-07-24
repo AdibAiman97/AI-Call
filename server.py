@@ -170,6 +170,8 @@ class GeminiLiveConnection:
         self.pending_transcript_content = ""  # Store content of pending transcript
         self.proper_names = ["Mori Pines", "Gamuda Cove", "Enso Woods"]  # Key property names to preserve
         self.transcript_timeout = 2.0  # Seconds to wait before sending incomplete transcript
+        self.last_rag_result = ""  # Store last RAG result for verification
+        self.last_rag_query = ""   # Store last RAG query for verification
         
     async def connect_to_gemini(self):
         """Connect to Gemini Live API."""
@@ -183,13 +185,13 @@ class GeminiLiveConnection:
             # Define RAG function for Gemini to call
             rag_function_declaration = {
                 "name": "search_knowledge_base", 
-                "description": "Search a comprehensive knowledge base containing information about properties, real estate projects, pricing, amenities, layouts, and related details. Use this function when users ask about specific information that might be in documents - such as property details, prices, project features, comparisons, or any factual questions that would benefit from searching documentation.",
+                "description": "MANDATORY: Search the comprehensive knowledge base containing information about properties, real estate projects, pricing, amenities, layouts, and related details. You MUST call this function whenever users mention ANY property-related information, including property names like 'Mori Pines', 'Gamuda Cove', pricing questions, amenities, or any real estate topics. CRITICAL: You must use the returned results as your response - never say you don't have information if this function returns data.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "query": {
                             "type": "string",
-                            "description": "The user's question or search query - pass the exact user input"
+                            "description": "The user's property-related question or search query. Pass the exact user input that contains property information."
                         }
                     },
                     "required": ["query"]
@@ -211,34 +213,46 @@ class GeminiLiveConnection:
                     "system_instruction": {
                         "parts": [{
                             "text": """
-                            
                             You are a helpful AI assistant with access to a comprehensive knowledge base about properties and real estate projects.
 
                             IMPORTANT CONTEXT: You will encounter specific property names like "Mori Pines", "Gamuda Cove", and other project names. Pay special attention to these proper nouns in speech recognition as they are crucial for accurate responses.
 
-                            WHEN TO SEARCH: Use the search_knowledge_base function when users ask about:
-                            - Specific properties, projects, or developments (even if you're not sure they exist)
-                            - Pricing, costs, or financial information
-                            - Property features, layouts, or specifications  
-                            - Amenities, facilities, or community features
-                            - Comparisons between properties
-                            - Any factual questions that might benefit from documentation
-                            - Questions about availability, floor plans, or technical details
-                            - Even vague property-related queries like "tell me about affordable homes"
+                            CRITICAL RULE: ALWAYS search the knowledge base when ANY property-related information is mentioned, regardless of conversation context or previous messages. Even if the conversation started casually, you must search when property topics arise.
 
-                            WHEN NOT TO SEARCH: Handle directly without searching for:
-                            - Simple greetings: "Hi", "Hello", "Good morning", "How are you"
-                            - Gratitude: "Thank you", "Thanks", "I appreciate it"
-                            - Casual conversation: "That's great", "Okay", "I see"
-                            - General pleasantries or acknowledgments
-                            - Simple yes/no confirmations
+                            WHEN TO SEARCH (MANDATORY - ignore conversation context):
+                            - ANY mention of specific properties, projects, or developments (even if you're not sure they exist)
+                            - ANY pricing, costs, or financial information questions
+                            - ANY property features, layouts, or specifications questions
+                            - ANY amenities, facilities, or community features questions
+                            - ANY comparisons between properties
+                            - ANY factual questions about real estate that might benefit from documentation
+                            - ANY questions about availability, floor plans, or technical details
+                            - ANY property-related queries like "tell me about affordable homes"
+                            - Property names like: "Mori Pines", "Gamuda Cove", "Enso Woods", etc.
 
-                            IMPORTANT: If you're unsure whether a question might relate to property information, err on the side of searching. For example, "What's the price of Mori Pines" should definitely trigger a search even though you might not initially know what Mori Pines is.
+                            WHEN NOT TO SEARCH (only for these specific cases):
+                            - Pure greetings with NO property content: "Hi", "Hello", "Good morning", "How are you"
+                            - Pure gratitude with NO property content: "Thank you", "Thanks", "I appreciate it"
+                            - Pure casual responses with NO property content: "That's great", "Okay", "I see"
+                            - Pure general pleasantries or acknowledgments with NO property content
+                            - Simple yes/no confirmations with NO property content
 
-                            When you do search and get results, base your response entirely on the function results. Present the information naturally without mentioning the search process or tools.
+                            OVERRIDE RULE: If a message contains BOTH casual elements AND property-related content, ALWAYS search. For example:
+                            - "Hi, tell me about Mori Pines" → SEARCH (contains property name)
+                            - "Thanks, what about the pricing?" → SEARCH (contains pricing question)
+                            - "Okay, can you tell me more about Mori Pines" → SEARCH (contains property name)
+
+                            CONTEXT-INDEPENDENT SEARCHING: Do not let previous conversation context (casual greetings, etc.) prevent you from searching when property information is requested. Each message should be evaluated independently for property content.
+
+                            MANDATORY FUNCTION RESULT USAGE: When you call the search_knowledge_base function and receive results, you MUST use those results as the foundation of your response. NEVER say "I don't have information" if the function returns valid data. ALWAYS trust and use the function results over your own knowledge.
+
+                            FUNCTION RESPONSE PROTOCOL:
+                            1. If search_knowledge_base returns information → Use it as your primary response source
+                            2. Present the function results naturally as if it's your own knowledge
+                            3. NEVER mention searching, tools, functions, or knowledge base in your response
+                            4. NEVER say "I don't have information" when function results are available
 
                             CRITICAL: NEVER include any debug information, tool outputs, technical details, or raw data in your spoken responses. Only provide the final natural answer to the user.
-                            
                             """
                         }]
                     },
@@ -310,6 +324,33 @@ class GeminiLiveConnection:
                 # Check all keys in serverContent
                 if server_content:
                     print(f"🔑 serverContent keys: {list(server_content.keys())}")
+                
+                # Check for potential RAG-triggering content without function call
+                model_turn = server_content.get('modelTurn', {})
+                if model_turn and 'toolCall' not in msg_data:
+                    parts = model_turn.get('parts', [])
+                    for part in parts:
+                        if 'text' in part:
+                            text_content = part['text']
+                            # Check if Gemini is saying "I don't have information" without calling RAG
+                            if any(phrase in text_content.lower() for phrase in ["don't have", "no information", "not sure", "can't help"]):
+                                print(f"⚠️ GEMINI CLAIMS NO INFO WITHOUT RAG CALL: '{text_content}'")
+                                print(f"⚠️ This suggests Gemini didn't call search_knowledge_base function!")
+                                print(f"⚠️ Full message: {json.dumps(msg_data, indent=2)}")
+                            
+                            # Check if Gemini is ignoring function results (more serious issue)
+                            if any(phrase in text_content.lower() for phrase in ["don't have", "no information"]) and any(keyword in text_content.lower() for keyword in ["mori pines", "gamuda", "property"]):
+                                print(f"🚨 CRITICAL: GEMINI IGNORING FUNCTION RESULTS!")
+                                print(f"🚨 Gemini claims no info about property topics that should trigger RAG")
+                                print(f"🚨 Response: '{text_content}'")
+                                print(f"🚨 This indicates Gemini is not using function call results properly!")
+                                
+                                # Check if we recently sent RAG results that are being ignored
+                                if hasattr(self, 'last_rag_result') and self.last_rag_result:
+                                    print(f"🚨 RECENT RAG RESULT WAS IGNORED!")
+                                    print(f"🚨 Last RAG query: '{self.last_rag_query}'")
+                                    print(f"🚨 Last RAG result: '{self.last_rag_result[:200]}...'")
+                                    print(f"🚨 Gemini should have used this information but ignored it!")
                 
                 # Extract transcripts using SDK-like patterns
                 await self._extract_transcripts_sdk_style(msg_data)
@@ -696,7 +737,14 @@ class GeminiLiveConnection:
                     
                     print(f"📤 Sending RAG result to Gemini: '{result_text[:100]}...'")
                     print(f"📤 Function response: {json.dumps(function_response)}")
+                    
+                    # Send function response to Gemini
                     await self.gemini_ws.send(json.dumps(function_response))
+                    
+                    # Store the RAG result for potential verification
+                    self.last_rag_result = result_text
+                    self.last_rag_query = query
+                    print(f"✅ Function response sent, stored RAG result for verification")
                     
                 else:
                     print(f"❓ Unknown function: {function_name}")
