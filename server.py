@@ -10,9 +10,10 @@ import json
 import os
 import time
 import wave
-from typing import Optional
+from typing import Optional, List, Dict
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 import logging
 from websockets.asyncio.client import connect
@@ -32,10 +33,18 @@ from api.property_router import router as property_router
 from api.pdf_router import router as pdf_router
 
 # Import database components
-from database.connection import engine, Base, get_db
+from database.connection import engine, Base, get_db, SessionLocal
 from services.call_session import CallSessionService
 from database.schemas import CallSessionBase
 from services.transcript_crud import create_session_message
+from database.models.call_session import CallSession
+from database.models.transcript import Transcript
+
+# Import AI Services
+from ai_services.call_suggestion_admin import get_suggestion_from_agent
+from ai_services.call_suggestion_customer import generate_caller_suggestions
+from ai_services.call_summarized_context import summarize_text
+from ai_services.sentiment_tool import analyze_sentiment_from_transcript
 
 # Setup logging to both console and file
 logging.basicConfig(
@@ -52,6 +61,243 @@ logger = logging.getLogger(__name__)
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 if not GOOGLE_API_KEY:
     raise ValueError("GOOGLE_API_KEY environment variable not set")
+
+# =============================================================================
+# AI SERVICES INTEGRATION (USING IMPORTS)
+# =============================================================================
+# All AI services are now imported from their respective files in ai_services/
+# This keeps the server.py clean and maintains separation of concerns
+
+def get_session_conversation(session_id: int) -> dict:
+    """
+    Get session conversation directly from database.
+    Returns dict with success status and conversation data.
+    """
+    db = SessionLocal()
+    try:
+        transcripts = (
+            db.query(Transcript)
+            .filter(Transcript.session_id == session_id)
+            .order_by(Transcript.created_at)
+            .all()
+        )
+
+        if not transcripts:
+            return {
+                "success": False,
+                "error": f"No transcripts found for session ID {session_id}",
+            }
+
+        conversation = [
+            {
+                "message_by": t.message_by,
+                "message": t.message,
+                "created_at": t.created_at.isoformat(),
+            }
+            for t in transcripts
+        ]
+
+        return {"success": True, "session_id": session_id, "conversation": conversation}
+
+    except Exception as e:
+        return {"success": False, "error": f"Database error: {str(e)}"}
+    finally:
+        db.close()
+
+# =============================================================================
+
+# =============================================================================
+# POST-CALL AI PROCESSING FUNCTION
+# =============================================================================
+
+async def process_call_session_ai(call_session_id: int):
+    """
+    Process a call session with all AI services after the call ends.
+    This runs asynchronously to avoid blocking the WebSocket cleanup.
+    """
+    try:
+        logger.info(f"🤖 Processing call session {call_session_id} with AI services")
+        print(f"🤖 Processing call session {call_session_id} with AI services")
+        
+        # Get session conversation first
+        conversation_data = get_session_conversation(call_session_id)
+        
+        if not conversation_data.get("success"):
+            logger.warning(f"No conversation found for session {call_session_id}")
+            print(f"⚠️ No conversation found for session {call_session_id}")
+            return
+        
+        conversation = conversation_data["conversation"]
+        
+        if len(conversation) == 0:
+            logger.warning(f"Empty conversation for session {call_session_id}")
+            print(f"⚠️ Empty conversation for session {call_session_id}")
+            return
+        
+        # Format conversation for processing
+        formatted_conversation = [
+            {"role": msg["message_by"], "content": msg["message"]} 
+            for msg in conversation
+        ]
+        
+        logger.info(f"🤖 Found {len(conversation)} messages in session {call_session_id}")
+        print(f"🤖 Found {len(conversation)} messages in session {call_session_id}")
+        
+        # 1. Generate and store conversation summary
+        try:
+            logger.info(f"📝 Generating summary for session {call_session_id}")
+            print(f"📝 Generating summary for session {call_session_id}")
+            summary = summarize_text(formatted_conversation, call_session_id)
+            logger.info(f"✅ Summary generated and stored for session {call_session_id}")
+            print(f"✅ Summary generated: {summary[:100]}...")
+        except Exception as e:
+            logger.error(f"❌ Error generating summary for session {call_session_id}: {e}")
+            print(f"❌ Error generating summary: {e}")
+        
+        # 2. Generate and store customer suggestions  
+        try:
+            logger.info(f"💡 Generating customer suggestions for session {call_session_id}")
+            print(f"💡 Generating customer suggestions for session {call_session_id}")
+            customer_suggestions = generate_caller_suggestions(formatted_conversation, call_session_id)
+            logger.info(f"✅ Customer suggestions generated and stored for session {call_session_id}")
+            print(f"✅ Customer suggestions generated: {customer_suggestions[:100]}...")
+        except Exception as e:
+            logger.error(f"❌ Error generating customer suggestions for session {call_session_id}: {e}")
+            print(f"❌ Error generating customer suggestions: {e}")
+        
+        # 3. Analyze sentiment for each transcript
+        try:
+            logger.info(f"😊 Analyzing sentiment for session {call_session_id}")
+            print(f"😊 Analyzing sentiment for session {call_session_id}")
+            
+            sentiment_results = []
+            db = SessionLocal()
+            try:
+                transcripts = (
+                    db.query(Transcript)
+                    .filter(Transcript.session_id == call_session_id)
+                    .order_by(Transcript.created_at)
+                    .all()
+                )
+                
+                for transcript in transcripts:
+                    try:
+                        sentiment_result = analyze_sentiment_from_transcript(transcript.id)
+                        sentiment_data = json.loads(sentiment_result)
+                        if sentiment_data.get("success"):
+                            sentiment_results.append(sentiment_data)
+                            sentiment_info = sentiment_data.get("sentiment_analysis", {})
+                            sentiment = sentiment_info.get("sentiment", "Unknown")
+                            confidence = sentiment_info.get("confidence", 0)
+                            print(f"   📊 Transcript {transcript.id}: {sentiment} (confidence: {confidence:.2f})")
+                        else:
+                            logger.warning(f"Sentiment analysis failed for transcript {transcript.id}")
+                    except Exception as transcript_error:
+                        logger.error(f"Error analyzing sentiment for transcript {transcript.id}: {transcript_error}")
+                        
+            finally:
+                db.close()
+            
+            logger.info(f"✅ Sentiment analysis completed for {len(sentiment_results)} transcripts in session {call_session_id}")
+            print(f"✅ Sentiment analysis completed for {len(sentiment_results)} transcripts")
+            
+        except Exception as e:
+            logger.error(f"❌ Error analyzing sentiment for session {call_session_id}: {e}")
+            print(f"❌ Error analyzing sentiment: {e}")
+        
+        # 4. Update call session with end time, duration, and sentiment counts
+        try:
+            logger.info(f"📊 Updating call session {call_session_id} with call data")
+            print(f"📊 Updating call session {call_session_id} with call data")
+            
+            db = SessionLocal()
+            call_session = db.query(CallSession).filter(CallSession.id == call_session_id).first()
+            
+            if call_session:
+                # Import datetime for end time calculation
+                from datetime import datetime, timezone
+                
+                # Set end time to current time
+                end_time = datetime.now(timezone.utc)
+                call_session.end_time = end_time
+                
+                # Calculate duration in seconds
+                if call_session.start_time:
+                    duration = end_time - call_session.start_time
+                    call_session.duration_secs = int(duration.total_seconds())
+                    print(f"   ⏱️ Call duration: {call_session.duration_secs} seconds")
+                
+                # Calculate sentiment counts from sentiment analysis results
+                positive_count = 0
+                neutral_count = 0
+                negative_count = 0
+                
+                for sentiment_data in sentiment_results:
+                    sentiment_info = sentiment_data.get("sentiment_analysis", {})
+                    sentiment = sentiment_info.get("sentiment", "").lower()
+                    
+                    if sentiment == "positive":
+                        positive_count += 1
+                    elif sentiment == "negative":
+                        negative_count += 1
+                    else:
+                        neutral_count += 1
+                
+                call_session.positive = positive_count
+                call_session.neutral = neutral_count
+                call_session.negative = negative_count
+                
+                print(f"   😊 Sentiment counts - Positive: {positive_count}, Neutral: {neutral_count}, Negative: {negative_count}")
+                
+                # Extract key words from conversation (simple approach)
+                try:
+                    # Create a list of all words from the conversation
+                    all_text = " ".join([msg["content"] for msg in formatted_conversation])
+                    # Simple keyword extraction - you could enhance this with NLP
+                    words = all_text.split()
+                    # Get unique words longer than 3 characters, limit to first 10
+                    key_words_list = list(set([word.strip('.,!?').lower() for word in words 
+                                             if len(word.strip('.,!?')) > 3]))[:10]
+                    call_session.key_words = ", ".join(key_words_list)
+                    print(f"   🔑 Key words: {call_session.key_words}")
+                except Exception as kw_error:
+                    print(f"   ⚠️ Could not extract key words: {kw_error}")
+                
+                # Commit all changes
+                db.commit()
+                db.refresh(call_session)
+                
+                logger.info(f"✅ Call session {call_session_id} updated successfully")
+                print(f"✅ Call session updated successfully")
+                print(f"   📞 End time: {call_session.end_time}")
+                print(f"   ⏱️ Duration: {call_session.duration_secs} seconds")
+                print(f"   📊 Sentiment: +{positive_count} ={neutral_count} -{negative_count}")
+                
+            else:
+                logger.warning(f"Call session {call_session_id} not found for update")
+                print(f"⚠️ Call session {call_session_id} not found for update")
+                
+            db.close()
+            
+        except Exception as e:
+            logger.error(f"❌ Error updating call session {call_session_id}: {e}")
+            print(f"❌ Error updating call session: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # 5. Log completion
+        logger.info(f"🎉 AI processing and call session update completed for session {call_session_id}")
+        print(f"🎉 AI processing and call session update completed for session {call_session_id}")
+        
+    except Exception as e:
+        logger.error(f"❌ Critical error in AI processing for session {call_session_id}: {e}")
+        print(f"❌ Critical error in AI processing: {e}")
+        import traceback
+        traceback.print_exc()
+
+# =============================================================================
+# END POST-CALL AI PROCESSING FUNCTION
+# =============================================================================
 
 # Configuration
 GEMINI_HOST = 'generativelanguage.googleapis.com'
@@ -1085,6 +1331,394 @@ class GeminiLiveConnection:
             await self.gemini_ws.close()
             logger.info("Disconnected from Gemini")
 
+# =============================================================================
+# AI SERVICES API ENDPOINTS
+# =============================================================================
+
+class AdminSuggestionRequest(BaseModel):
+    session_id: int
+    query: str
+    message_by: str
+
+class CustomerSuggestionRequest(BaseModel):
+    conversation: List[Dict[str, str]]
+    call_session_id: Optional[int] = None
+
+class SummarizationRequest(BaseModel):
+    conversation: List[Dict[str, str]]
+    call_session_id: int
+
+class SentimentAnalysisRequest(BaseModel):
+    transcript_id: int
+
+class SessionConversationRequest(BaseModel):
+    session_id: int
+
+@app.post("/api/ai/admin-suggestion")
+async def admin_suggestion_endpoint(request: AdminSuggestionRequest):
+    """Generate admin suggestions using LangChain agent."""
+    try:
+        suggestion = get_suggestion_from_agent(
+            session_id=request.session_id,
+            query=request.query,
+            message_by=request.message_by
+        )
+        return {
+            "success": True,
+            "suggestion": suggestion,
+            "session_id": request.session_id
+        }
+    except Exception as e:
+        logger.error(f"Admin suggestion error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating admin suggestion: {str(e)}")
+
+@app.post("/api/ai/customer-suggestions")
+async def customer_suggestions_endpoint(request: CustomerSuggestionRequest):
+    """Generate customer suggestions for post-call actions."""
+    try:
+        suggestions = generate_caller_suggestions(
+            conversation=request.conversation,
+            call_session_id=request.call_session_id
+        )
+        return {
+            "success": True,
+            "suggestions": suggestions,
+            "call_session_id": request.call_session_id
+        }
+    except Exception as e:
+        logger.error(f"Customer suggestions error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating customer suggestions: {str(e)}")
+
+@app.post("/api/ai/summarize")
+async def summarize_conversation_endpoint(request: SummarizationRequest):
+    """Summarize a conversation and store it in the database."""
+    try:
+        summary = summarize_text(
+            conversation=request.conversation,
+            call_session_id=request.call_session_id
+        )
+        return {
+            "success": True,
+            "summary": summary,
+            "call_session_id": request.call_session_id
+        }
+    except Exception as e:
+        logger.error(f"Summarization error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error summarizing conversation: {str(e)}")
+
+@app.post("/api/ai/sentiment-analysis")
+async def sentiment_analysis_endpoint(request: SentimentAnalysisRequest):
+    """Analyze sentiment of a specific transcript."""
+    try:
+        result = analyze_sentiment_from_transcript(request.transcript_id)
+        result_data = json.loads(result)
+        
+        if result_data.get("success"):
+            return result_data
+        else:
+            raise HTTPException(status_code=404, detail=result_data.get("error", "Unknown error"))
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error in sentiment analysis: {e}")
+        raise HTTPException(status_code=500, detail="Error parsing sentiment analysis result")
+    except Exception as e:
+        logger.error(f"Sentiment analysis error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error analyzing sentiment: {str(e)}")
+
+@app.post("/api/ai/session-conversation")
+async def session_conversation_endpoint(request: SessionConversationRequest):
+    """Retrieve full conversation for a session."""
+    try:
+        result_data = get_session_conversation(request.session_id)
+        
+        if result_data.get("success"):
+            return result_data
+        else:
+            raise HTTPException(status_code=404, detail=result_data.get("error", "Unknown error"))
+    except Exception as e:
+        logger.error(f"Session conversation error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving session conversation: {str(e)}")
+
+# Bulk AI processing endpoint
+@app.post("/api/ai/process-session")
+async def process_session_endpoint(session_id: int):
+    """Process a complete session with all AI services (summary, sentiment, suggestions)."""
+    try:
+        # Get session conversation
+        conversation_data = get_session_conversation(session_id)
+        
+        if not conversation_data.get("success"):
+            raise HTTPException(status_code=404, detail="Session not found or has no conversation")
+        
+        conversation = conversation_data["conversation"]
+        
+        # Format conversation for processing
+        formatted_conversation = [
+            {"role": msg["message_by"], "content": msg["message"]} 
+            for msg in conversation
+        ]
+        
+        # Generate summary
+        summary = summarize_text(formatted_conversation, session_id)
+        
+        # Generate customer suggestions
+        customer_suggestions = generate_caller_suggestions(formatted_conversation, session_id)
+        
+        # Analyze sentiment for each transcript (if needed)
+        sentiment_results = []
+        db = SessionLocal()
+        try:
+            transcripts = (
+                db.query(Transcript)
+                .filter(Transcript.session_id == session_id)
+                .order_by(Transcript.created_at)
+                .all()
+            )
+            
+            for transcript in transcripts:
+                sentiment_result = analyze_sentiment_from_transcript(transcript.id)
+                sentiment_data = json.loads(sentiment_result)
+                if sentiment_data.get("success"):
+                    sentiment_results.append(sentiment_data)
+        finally:
+            db.close()
+        
+        return {
+            "success": True,
+            "session_id": session_id,
+            "summary": summary,
+            "customer_suggestions": customer_suggestions,
+            "sentiment_analysis": sentiment_results,
+            "conversation_count": len(conversation)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Session processing error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing session: {str(e)}")
+
+@app.get("/api/ai/health")
+async def ai_services_health():
+    """Health check for AI services."""
+    try:
+        # Test AI services by calling them with simple test data
+        test_conversation = [{"role": "User", "content": "Hello"}, {"role": "AI", "content": "Hi there"}]
+        
+        # Test summarization service
+        try:
+            summary_test = summarize_text(test_conversation, call_session_id=0)  # Use 0 for test (won't store)
+            summarization_status = "healthy" if summary_test and not summary_test.startswith("Error") else "error"
+        except Exception as e:
+            summarization_status = f"error: {str(e)}"
+        
+        # Test customer suggestions service
+        try:
+            suggestions_test = generate_caller_suggestions(test_conversation, call_session_id=None)
+            suggestions_status = "healthy" if suggestions_test and not suggestions_test.startswith("Error") else "error"
+        except Exception as e:
+            suggestions_status = f"error: {str(e)}"
+        
+        # Test database connectivity for AI services
+        db = SessionLocal()
+        try:
+            # Simple query to test database
+            transcript_count = db.query(Transcript).count()
+            db_status = "healthy"
+        except Exception as e:
+            db_status = f"error: {str(e)}"
+            transcript_count = 0
+        finally:
+            db.close()
+        
+        # Test sentiment analysis (requires a real transcript, so just check import)
+        try:
+            # Just check if the function is callable
+            sentiment_status = "healthy" if callable(analyze_sentiment_from_transcript) else "error"
+        except Exception as e:
+            sentiment_status = f"error: {str(e)}"
+        
+        return {
+            "status": "healthy" if all([
+                summarization_status == "healthy",
+                suggestions_status == "healthy", 
+                db_status == "healthy",
+                sentiment_status == "healthy"
+            ]) else "partial",
+            "services": {
+                "summarization": summarization_status,
+                "customer_suggestions": suggestions_status,
+                "sentiment_analysis": sentiment_status,
+                "database": db_status,
+                "transcript_count": transcript_count
+            },
+            "api_endpoints": [
+                "/api/ai/admin-suggestion",
+                "/api/ai/customer-suggestions", 
+                "/api/ai/summarize",
+                "/api/ai/sentiment-analysis",
+                "/api/ai/session-conversation",
+                "/api/ai/process-session",
+                "/api/ai/process-session-manual/{session_id}",
+                "/api/call-session/{session_id}/status"
+            ]
+        }
+    except Exception as e:
+        logger.error(f"AI services health check error: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "services": {
+                "summarization": "unknown",
+                "customer_suggestions": "unknown", 
+                "sentiment_analysis": "unknown",
+                "database": "unknown"
+            }
+        }
+
+@app.post("/api/ai/process-session-manual/{session_id}")
+async def process_session_manual_trigger(session_id: int):
+    """
+    Manually trigger AI processing for a specific session.
+    Useful for reprocessing sessions or testing.
+    """
+    try:
+        logger.info(f"Manual AI processing triggered for session {session_id}")
+        
+        # Check if session exists and has conversation
+        conversation_data = get_session_conversation(session_id)
+        
+        if not conversation_data.get("success"):
+            raise HTTPException(status_code=404, detail="Session not found or has no conversation")
+        
+        conversation = conversation_data["conversation"]
+        if len(conversation) == 0:
+            raise HTTPException(status_code=400, detail="Session has no messages to process")
+        
+        # Start AI processing in background
+        asyncio.create_task(process_call_session_ai(session_id))
+        
+        return {
+            "success": True,
+            "message": f"AI processing started for session {session_id}",
+            "session_id": session_id,
+            "message_count": len(conversation),
+            "note": "Processing is running in the background. Check logs for progress."
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error manually triggering AI processing for session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error starting AI processing: {str(e)}")
+
+@app.get("/api/call-session/{session_id}/status")
+async def get_call_session_status(session_id: int):
+    """
+    Get the current status of a call session including AI processing results.
+    Shows the automatically updated call session data.
+    """
+    try:
+        db = SessionLocal()
+        call_session = db.query(CallSession).filter(CallSession.id == session_id).first()
+        
+        if not call_session:
+            raise HTTPException(status_code=404, detail="Call session not found")
+        
+        # Get conversation count
+        conversation_count = db.query(Transcript).filter(Transcript.session_id == session_id).count()
+        
+        # Check if AI processing has been completed (has end_time and summary)
+        ai_processed = bool(call_session.end_time and call_session.summarized_content)
+        
+        db.close()
+        
+        return {
+            "success": True,
+            "call_session": {
+                "id": call_session.id,
+                "cust_id": call_session.cust_id,
+                "start_time": call_session.start_time.isoformat() if call_session.start_time else None,
+                "end_time": call_session.end_time.isoformat() if call_session.end_time else None,
+                "duration_secs": call_session.duration_secs,
+                "duration_formatted": f"{call_session.duration_secs // 60}m {call_session.duration_secs % 60}s" if call_session.duration_secs else None,
+                "sentiment_counts": {
+                    "positive": call_session.positive,
+                    "neutral": call_session.neutral,
+                    "negative": call_session.negative,
+                    "total": (call_session.positive or 0) + (call_session.neutral or 0) + (call_session.negative or 0)
+                },
+                "key_words": call_session.key_words,
+                "summarized_content": call_session.summarized_content,
+                "customer_suggestions": call_session.customer_suggestions,
+                "admin_suggestions": call_session.admin_suggestions,
+                "conversation_count": conversation_count,
+                "ai_processed": ai_processed,
+                "call_status": "completed" if call_session.end_time else "in_progress"
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting call session status for {session_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving call session status: {str(e)}")
+
+@app.post("/api/call-session/{session_id}/test-end-call")
+async def test_end_call(session_id: int):
+    """
+    Test endpoint to simulate ending a call and triggering automatic AI processing.
+    This is useful for testing the automatic call session updates.
+    """
+    try:
+        logger.info(f"Test: Simulating call end for session {session_id}")
+        
+        # Check if session exists
+        db = SessionLocal()
+        call_session = db.query(CallSession).filter(CallSession.id == session_id).first()
+        
+        if not call_session:
+            db.close()
+            raise HTTPException(status_code=404, detail="Call session not found")
+        
+        # Check if session has any conversation
+        conversation_count = db.query(Transcript).filter(Transcript.session_id == session_id).count()
+        
+        if conversation_count == 0:
+            db.close()
+            raise HTTPException(status_code=400, detail="Session has no conversation to process")
+        
+        db.close()
+        
+        # Trigger the same AI processing that happens when WebSocket closes
+        asyncio.create_task(process_call_session_ai(session_id))
+        
+        return {
+            "success": True,
+            "message": f"Simulated call end for session {session_id}",
+            "session_id": session_id,
+            "conversation_count": conversation_count,
+            "note": "AI processing and call session update started in background. Use GET /api/call-session/{session_id}/status to check results.",
+            "test_workflow": [
+                "1. Call ended (simulated)",
+                "2. AI processing started automatically",
+                "3. Conversation summarized",
+                "4. Customer suggestions generated", 
+                "5. Sentiment analysis performed",
+                "6. Call session updated with end time, duration, sentiment counts",
+                "7. Check status with GET /api/call-session/{session_id}/status"
+            ]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in test end call for session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error simulating call end: {str(e)}")
+
+# =============================================================================
+# END AI SERVICES API ENDPOINTS
+# =============================================================================
+
 @app.websocket("/ws/{call_session_id}")
 async def websocket_endpoint(websocket: WebSocket, call_session_id: int):
     """WebSocket endpoint for client connections."""
@@ -1148,6 +1782,23 @@ async def websocket_endpoint(websocket: WebSocket, call_session_id: int):
         if websocket in active_connections:
             del active_connections[websocket]
         logger.info("Client connection cleaned up")
+        
+        # =============================================================================
+        # POST-CALL AI PROCESSING
+        # =============================================================================
+        
+        # Process the call session with AI services after connection closes
+        if call_session_id:
+            try:
+                logger.info(f"Starting post-call AI processing for session {call_session_id}")
+                print(f"🤖 Starting post-call AI processing for session {call_session_id}")
+                
+                # Run AI processing in background to avoid blocking cleanup
+                asyncio.create_task(process_call_session_ai(call_session_id))
+                
+            except Exception as e:
+                logger.error(f"Error starting post-call AI processing: {e}")
+                print(f"❌ Error starting post-call AI processing: {e}")
 
 async def handle_client_message(connection: GeminiLiveConnection, data: dict):
     """Handle message from client."""
@@ -1238,12 +1889,40 @@ async def health_check():
 async def api_status():
     """API status endpoint for Vue frontend."""
     rag_health = await get_rag_health()
+    
+    # Check AI services health
+    ai_services_healthy = True
+    try:
+        # Quick test of AI services by checking if they're importable and callable
+        ai_services_healthy = all([
+            callable(get_suggestion_from_agent),
+            callable(generate_caller_suggestions),
+            callable(summarize_text),
+            callable(analyze_sentiment_from_transcript)
+        ])
+    except Exception:
+        ai_services_healthy = False
+    
     return {
         "status": "ready",
         "websocket_url": "/ws",
         "active_connections": len(active_connections),
         "api_key_configured": bool(GOOGLE_API_KEY),
-        "rag_status": rag_health
+        "rag_status": rag_health,
+        "ai_services": {
+            "status": "healthy" if ai_services_healthy else "error",
+                         "endpoints_available": [
+                 "/api/ai/admin-suggestion",
+                 "/api/ai/customer-suggestions", 
+                 "/api/ai/summarize",
+                 "/api/ai/sentiment-analysis",
+                 "/api/ai/session-conversation",
+                 "/api/ai/process-session",
+                 "/api/ai/process-session-manual/{session_id}",
+                 "/api/ai/health",
+                 "/api/call-session/{session_id}/status"
+             ]
+        }
     }
 
 @app.post("/api/rag/query")
@@ -1467,364 +2146,6 @@ async def test_gemini_live_endpoint(request_data: dict):
             "status": "error",
             "error": str(e)
         }
-
-# @app.get("/", response_class=HTMLResponse)
-# async def get_index():
-    # """Serve the main HTML page."""
-    # html_content = """
-    # <!DOCTYPE html>
-    # <html>
-    # <head>
-    #     <title>Gemini Live API</title>
-    #     <meta charset="UTF-8">
-    #     <style>
-    #         body {
-    #             font-family: Arial, sans-serif;
-    #             max-width: 800px;
-    #             margin: 0 auto;
-    #             padding: 20px;
-    #             background-color: #f5f5f5;
-    #         }
-    #         .container {
-    #             background: white;
-    #             border-radius: 10px;
-    #             padding: 30px;
-    #             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    #         }
-    #         .header {
-    #             text-align: center;
-    #             margin-bottom: 30px;
-    #         }
-    #         .controls {
-    #             text-align: center;
-    #             margin: 20px 0;
-    #         }
-    #         button {
-    #             background: #4CAF50;
-    #             color: white;
-    #             border: none;
-    #             padding: 15px 30px;
-    #             font-size: 16px;
-    #             border-radius: 5px;
-    #             cursor: pointer;
-    #             margin: 0 10px;
-    #         }
-    #         button:disabled {
-    #             background: #cccccc;
-    #             cursor: not-allowed;
-    #         }
-    #         button.stop {
-    #             background: #f44336;
-    #         }
-    #         .status {
-    #             text-align: center;
-    #             margin: 20px 0;
-    #             padding: 10px;
-    #             border-radius: 5px;
-    #         }
-    #         .status.connected {
-    #             background: #d4edda;
-    #             color: #155724;
-    #             border: 1px solid #c3e6cb;
-    #         }
-    #         .status.error {
-    #             background: #f8d7da;
-    #             color: #721c24;
-    #             border: 1px solid #f5c6cb;
-    #         }
-    #         .status.info {
-    #             background: #d1ecf1;
-    #             color: #0c5460;
-    #             border: 1px solid #bee5eb;
-    #         }
-    #         .conversation {
-    #             border: 1px solid #ddd;
-    #             border-radius: 5px;
-    #             padding: 20px;
-    #             height: 300px;
-    #             overflow-y: auto;
-    #             margin: 20px 0;
-    #             background: #fafafa;
-    #         }
-    #         .message {
-    #             margin: 10px 0;
-    #             padding: 8px 12px;
-    #             border-radius: 5px;
-    #         }
-    #         .message.user {
-    #             background: #007bff;
-    #             color: white;
-    #             margin-left: 20%;
-    #         }
-    #         .message.gemini {
-    #             background: #28a745;
-    #             color: white;
-    #             margin-right: 20%;
-    #         }
-    #         .message.system {
-    #             background: #6c757d;
-    #             color: white;
-    #             text-align: center;
-    #             font-style: italic;
-    #         }
-    #         .audio-visualizer {
-    #             width: 100px;
-    #             height: 100px;
-    #             border: 3px solid #4CAF50;
-    #             border-radius: 50%;
-    #             margin: 20px auto;
-    #             position: relative;
-    #             display: none;
-    #         }
-    #         .audio-visualizer.active {
-    #             display: block;
-    #             animation: pulse 1s infinite;
-    #         }
-    #         @keyframes pulse {
-    #             0% { transform: scale(1); border-color: #4CAF50; }
-    #             50% { transform: scale(1.05); border-color: #45a049; }
-    #             100% { transform: scale(1); border-color: #4CAF50; }
-    #         }
-    #     </style>
-    # </head>
-    # <body>
-    #     <div class="container">
-    #         <div class="header">
-    #             <h1>🎤 Gemini Live API</h1>
-    #             <p>Voice conversation with Google Gemini AI</p>
-    #         </div>
-            
-    #         <div class="controls">
-    #             <button id="startBtn" onclick="startConversation()">Start Conversation</button>
-    #             <button id="stopBtn" onclick="stopConversation()" disabled class="stop">Stop Conversation</button>
-    #         </div>
-            
-    #         <div class="audio-visualizer" id="visualizer"></div>
-            
-    #         <div class="status" id="status">Ready to connect</div>
-            
-    #         <div class="conversation" id="conversation">
-    #             <div class="message system">Conversation will appear here...</div>
-    #         </div>
-    #     </div>
-
-    #     <script>
-    #         let websocket = null;
-    #         let mediaRecorder = null;
-    #         let audioContext = null;
-    #         let isRecording = false;
-
-    #         function addMessage(content, type = 'system') {
-    #             const conversation = document.getElementById('conversation');
-    #             const message = document.createElement('div');
-    #             message.className = `message ${type}`;
-    #             message.textContent = content;
-    #             conversation.appendChild(message);
-    #             conversation.scrollTop = conversation.scrollHeight;
-    #         }
-
-    #         function updateStatus(message, type = 'info') {
-    #             const status = document.getElementById('status');
-    #             status.textContent = message;
-    #             status.className = `status ${type}`;
-    #         }
-
-    #         function toggleVisualizer(show) {
-    #             const visualizer = document.getElementById('visualizer');
-    #             visualizer.className = show ? 'audio-visualizer active' : 'audio-visualizer';
-    #         }
-
-    #         async function startConversation() {
-    #             try {
-    #                 updateStatus('Connecting to server...', 'info');
-                    
-    #                 // Connect to WebSocket
-    #                 websocket = new WebSocket(`ws://${window.location.host}/ws`);
-                    
-    #                 websocket.onopen = async () => {
-    #                     updateStatus('Connected! Starting audio...', 'connected');
-    #                     await setupAudio();
-    #                 };
-                    
-    #                 websocket.onmessage = (event) => {
-    #                     const data = JSON.parse(event.data);
-    #                     handleServerMessage(data);
-    #                 };
-                    
-    #                 websocket.onerror = (error) => {
-    #                     updateStatus('Connection error', 'error');
-    #                     console.error('WebSocket error:', error);
-    #                 };
-                    
-    #                 websocket.onclose = () => {
-    #                     updateStatus('Connection closed', 'info');
-    #                     stopConversation();
-    #                 };
-                    
-    #             } catch (error) {
-    #                 updateStatus(`Error: ${error.message}`, 'error');
-    #             }
-    #         }
-
-    #         async function setupAudio() {
-    #             try {
-    #                 const stream = await navigator.mediaDevices.getUserMedia({
-    #                     audio: {
-    #                         sampleRate: 16000,
-    #                         channelCount: 1,
-    #                         echoCancellation: true,
-    #                         noiseSuppression: true
-    #                     }
-    #                 });
-
-    #                 mediaRecorder = new MediaRecorder(stream, {
-    #                     mimeType: 'audio/webm;codecs=opus'
-    #                 });
-
-    #                 mediaRecorder.ondataavailable = async (event) => {
-    #                     if (event.data.size > 0 && websocket?.readyState === WebSocket.OPEN) {
-    #                         const audioBuffer = await event.data.arrayBuffer();
-    #                         const audioData = new Uint8Array(audioBuffer);
-    #                         const base64Audio = btoa(String.fromCharCode(...audioData));
-                            
-    #                         websocket.send(JSON.stringify({
-    #                             type: 'audio',
-    #                             data: base64Audio
-    #                         }));
-    #                     }
-    #                 };
-
-    #                 mediaRecorder.start(250); // Send data every 250ms
-    #                 isRecording = true;
-                    
-    #                 document.getElementById('startBtn').disabled = true;
-    #                 document.getElementById('stopBtn').disabled = false;
-                    
-    #                 toggleVisualizer(true);
-    #                 updateStatus('Recording... You can speak now!', 'connected');
-    #                 addMessage('Conversation started - you can speak now', 'system');
-
-    #             } catch (error) {
-    #                 updateStatus(`Microphone error: ${error.message}`, 'error');
-    #             }
-    #         }
-
-    #         function handleServerMessage(data) {
-    #             switch (data.type) {
-    #                 case 'audio':
-    #                     playAudio(data.data, data.config);
-    #                     break;
-    #                 case 'text':
-    #                     addMessage(data.content, 'gemini');
-    #                     break;
-    #                 case 'turn_complete':
-    #                     updateStatus(data.message, 'connected');
-    #                     break;
-    #                 case 'interrupted':
-    #                     addMessage(data.message, 'system');
-    #                     break;
-    #                 case 'error':
-    #                     updateStatus(data.message, 'error');
-    #                     addMessage(`Error: ${data.message}`, 'system');
-    #                     break;
-    #             }
-    #         }
-
-    #         function playAudio(base64Data, config) {
-    #             try {
-    #                 const binaryString = atob(base64Data);
-    #                 const bytes = new Uint8Array(binaryString.length);
-    #                 for (let i = 0; i < binaryString.length; i++) {
-    #                     bytes[i] = binaryString.charCodeAt(i);
-    #                 }
-
-    #                 // Create WAV file
-    #                 const wavBuffer = createWavBuffer(bytes, config.sample_rate);
-    #                 const blob = new Blob([wavBuffer], { type: 'audio/wav' });
-    #                 const audioUrl = URL.createObjectURL(blob);
-
-    #                 const audio = new Audio(audioUrl);
-    #                 audio.onended = () => URL.revokeObjectURL(audioUrl);
-    #                 audio.play().catch(console.error);
-
-    #             } catch (error) {
-    #                 console.error('Audio playback error:', error);
-    #             }
-    #         }
-
-    #         function createWavBuffer(pcmData, sampleRate) {
-    #             const buffer = new ArrayBuffer(44 + pcmData.length);
-    #             const view = new DataView(buffer);
-                
-    #             // WAV header
-    #             const writeString = (offset, string) => {
-    #                 for (let i = 0; i < string.length; i++) {
-    #                     view.setUint8(offset + i, string.charCodeAt(i));
-    #                 }
-    #             };
-
-    #             writeString(0, 'RIFF');
-    #             view.setUint32(4, 36 + pcmData.length, true);
-    #             writeString(8, 'WAVE');
-    #             writeString(12, 'fmt ');
-    #             view.setUint32(16, 16, true);
-    #             view.setUint16(20, 1, true);
-    #             view.setUint16(22, 1, true);
-    #             view.setUint32(24, sampleRate, true);
-    #             view.setUint32(28, sampleRate * 2, true);
-    #             view.setUint16(32, 2, true);
-    #             view.setUint16(34, 16, true);
-    #             writeString(36, 'data');
-    #             view.setUint32(40, pcmData.length, true);
-
-    #             const uint8View = new Uint8Array(buffer, 44);
-    #             uint8View.set(pcmData);
-
-    #             return buffer;
-    #         }
-
-    #         function stopConversation() {
-    #             isRecording = false;
-    #             toggleVisualizer(false);
-                
-    #             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    #                 mediaRecorder.stop();
-    #                 mediaRecorder.stream.getTracks().forEach(track => track.stop());
-    #             }
-                
-    #             if (websocket) {
-    #                 websocket.close();
-    #                 websocket = null;
-    #             }
-                
-    #             document.getElementById('startBtn').disabled = false;
-    #             document.getElementById('stopBtn').disabled = true;
-                
-    #             updateStatus('Conversation stopped', 'info');
-    #             addMessage('Conversation ended', 'system');
-    #         }
-
-    #         // Send initial message when connection is established
-    #         function sendInitialMessage() {
-    #             if (websocket?.readyState === WebSocket.OPEN) {
-    #                 websocket.send(JSON.stringify({
-    #                     type: 'text',
-    #                     content: 'Hello! I\'m ready to have a conversation.'
-    #                 }));
-    #             }
-    #         }
-
-    #         // Auto-send initial message after connection
-    #         setTimeout(() => {
-    #             if (websocket?.readyState === WebSocket.OPEN && isRecording) {
-    #                 sendInitialMessage();
-    #             }
-    #         }, 1000);
-    #     </script>
-    # </body>
-    # </html>
-    # """
-    # return HTMLResponse(content=html_content)
 
 if __name__ == "__main__":
     import uvicorn
