@@ -21,6 +21,14 @@ from rag_integration import rag_service, initialize_rag, process_rag_query, get_
 import io
 import tempfile
 
+# Import existing routers
+from api.customer_router import router as customer_router
+from api.call_session_router import router as call_session_router
+from api.transcript_router import router as transcript_router
+from api.appointment_router import router as appointment_router
+from api.property_router import router as property_router
+from api.pdf_router import router as pdf_router
+
 # Import database components
 from database.connection import engine, Base, get_db
 from services.call_session import CallSessionService
@@ -45,6 +53,9 @@ if not GOOGLE_API_KEY:
 # Configuration
 GEMINI_HOST = 'generativelanguage.googleapis.com'
 GEMINI_MODEL = 'models/gemini-2.0-flash-live-001'
+
+# VAD Configuration - Set to False if having voice detection issues
+ENABLE_VAD = True  # Change to False to disable VAD temporarily
 
 # Audio configuration
 class AudioConfig:
@@ -98,6 +109,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(customer_router)
+app.include_router(call_session_router)
+app.include_router(transcript_router)
+app.include_router(appointment_router)
+app.include_router(property_router)
+app.include_router(pdf_router)
 
 def encode_audio_input(data: bytes, config: AudioConfig) -> dict:
     """Build message with user input audio bytes."""
@@ -198,7 +216,7 @@ class GeminiLiveConnection:
                 }
             }
             
-            # Send initial setup with audio response modality, transcription, and RAG tool
+            # Send initial setup with audio response modality, transcription, optional VAD, and RAG tool
             setup_message = {
                 "setup": {
                     "model": GEMINI_MODEL,
@@ -210,9 +228,30 @@ class GeminiLiveConnection:
                     },
                     "output_audio_transcription": {},
                     "input_audio_transcription": {},
-                    "system_instruction": {
-                        "parts": [{
-                            "text": """
+                }
+            }
+            
+            # Add VAD configuration only if enabled
+            if ENABLE_VAD:
+                setup_message["setup"]["realtime_input_config"] = {
+                    # Voice Activity Detection (VAD) configuration - More sensitive settings
+                    # Based on Example 8 from Google's Gemini Live API reference
+                    "automatic_activity_detection": {
+                        "disabled": False,  # Enable VAD
+                        "start_of_speech_sensitivity": "START_SENSITIVITY_HIGH",  # Very sensitive to speech start
+                        "end_of_speech_sensitivity": "END_SENSITIVITY_HIGH",     # More sensitive to speech end
+                        "prefix_padding_ms": 100,     # Include 100ms before detected speech start
+                        "silence_duration_ms": 300    # Wait 300ms of silence before considering speech ended
+                    }
+                }
+                print(f"🎙️ VAD enabled with HIGH sensitivity settings")
+            else:
+                print(f"🎙️ VAD disabled - using continuous audio streaming")
+            
+            # Add system instruction and tools
+            setup_message["setup"]["system_instruction"] = {
+                "parts": [{
+                    "text": """
                             You are a helpful AI assistant with access to a comprehensive knowledge base about properties and real estate projects.
 
                             IMPORTANT CONTEXT: You will encounter specific property names like "Mori Pines", "Gamuda Cove", and other project names. Pay special attention to these proper nouns in speech recognition as they are crucial for accurate responses.
@@ -254,15 +293,15 @@ class GeminiLiveConnection:
 
                             CRITICAL: NEVER include any debug information, tool outputs, technical details, or raw data in your spoken responses. Only provide the final natural answer to the user.
                             """
-                        }]
-                    },
-                    "tools": [
-                        {
-                            "function_declarations": [rag_function_declaration]
-                        }
-                    ]
-                }
+                }]
             }
+            
+            # Add tools
+            setup_message["setup"]["tools"] = [
+                {
+                    "function_declarations": [rag_function_declaration]
+                }
+            ]
             print(f"📤 Sending setup to Gemini ({GEMINI_MODEL}) with RAG function")
             
             await self.gemini_ws.send(json.dumps(setup_message))
@@ -427,7 +466,12 @@ class GeminiLiveConnection:
                     if server_content.get('turnComplete'):
                         print(f"✅ Turn complete")
                     if server_content.get('interrupted'):
-                        print(f"⏸️ Interrupted")
+                        print(f"⏸️ AI response interrupted by user")
+                        # Forward interruption to frontend immediately
+                        await self.client_ws.send_json({
+                            "type": "interrupted",
+                            "message": "AI response interrupted by user speech"
+                        })
                 
                 # Handle function calls from Gemini
                 if 'toolCall' in msg_data:
@@ -557,16 +601,44 @@ class GeminiLiveConnection:
                 if 'data' in audio_chunk:
                     print(f"🔊 Audio chunk received: {len(audio_chunk['data'])} chars")
             
-            # Handle activity detection
-            if 'activity_start' in msg_data:
-                print(f"🎙️ User started speaking")
+            # Handle Voice Activity Detection (VAD) events
+            if 'activity_start' in msg_data or 'activityStart' in msg_data:
+                print(f"🎙️ VAD: User started speaking - will interrupt AI if speaking")
+                # Send activity start notification to frontend
+                await self.client_ws.send_json({
+                    "type": "activity_start", 
+                    "message": "User started speaking"
+                })
+                # Send interruption signal to stop AI speech immediately
+                await self.client_ws.send_json({
+                    "type": "interrupted",
+                    "message": "AI speech interrupted by user"
+                })
+                
+                # Send audio stream end to flush any buffered audio  
+                if self.gemini_ws and self.is_connected:
+                    try:
+                        audio_stream_end_message = {
+                            "realtimeInput": {
+                                "audioStreamEnd": True
+                            }
+                        }
+                        await self.gemini_ws.send(json.dumps(audio_stream_end_message))
+                        print(f"📤 Sent audio stream end signal to Gemini")
+                    except Exception as e:
+                        print(f"❌ Error sending audio stream end: {e}")
                 # Clear any old transcript buffer when user starts speaking
                 self.user_transcript_buffer = ""
                 # Clear last sent transcript to ensure we don't supplement old messages
                 self.last_sent_transcript = ""
                 
-            if 'activity_end' in msg_data:
-                print(f"🎙️ User stopped speaking")
+            if 'activity_end' in msg_data or 'activityEnd' in msg_data:
+                print(f"🎙️ VAD: User stopped speaking")
+                # Send activity end notification to frontend
+                await self.client_ws.send_json({
+                    "type": "activity_end", 
+                    "message": "User stopped speaking"
+                })
                 # Always flush user transcript when user stops speaking, with delay to prevent UI flickering
                 if self.user_transcript_buffer.strip():
                     print(f"👤 Scheduling delayed user transcript send: \"{self.user_transcript_buffer.strip()}\"")
@@ -583,6 +655,15 @@ class GeminiLiveConnection:
                     self.pending_transcript_task = asyncio.create_task(self._send_delayed_transcript(pending_transcript))
                 else:
                     print(f"👤 No user transcript to flush (buffer was empty)")
+                    
+            # Handle VAD speech detected event (indicates audio was detected but not necessarily speech)
+            if 'speechDetected' in msg_data:
+                speech_detected = msg_data['speechDetected']
+                print(f"🎙️ VAD: Speech detected = {speech_detected}")
+                await self.client_ws.send_json({
+                    "type": "speech_detected",
+                    "detected": speech_detected
+                })
                     
                 
             # Removed generic text field search to reduce debug noise
