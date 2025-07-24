@@ -4,9 +4,9 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# API Configuration
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")  # API KEY
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key="
+# API Configuration (Legacy - kept for backward compatibility)
+# GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")  # No longer needed with Vertex AI auth
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key="
 
 # MongoDB Configuration
 # Create a .env file with: MONGO_DB="mongodb+srv://username:password@cluster.mongodb.net/?retryWrites=true&w=majority"

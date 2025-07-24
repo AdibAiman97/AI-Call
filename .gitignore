@@ -18,3 +18,6 @@ build/
 
 # markdown
 GEMINI.md
+
+gemini_live.log
+references
