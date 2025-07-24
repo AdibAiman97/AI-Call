@@ -14,7 +14,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
 from dotenv import load_dotenv
-
+import certifi
 # Setup logging
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ class RAGService:
             )
             
             # Initialize MongoDB client
-            self.client = MongoClient(self.MONGODB_URI)
+            self.client = MongoClient(self.MONGODB_URI,tlsCAFile=certifi.where())
             collection = self.client[self.DB_NAME][self.COLLECTION_NAME]
             
             # Test connection

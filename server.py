@@ -20,6 +20,8 @@ import numpy as np
 from rag_integration import rag_service, initialize_rag, process_rag_query, get_rag_health
 import io
 import tempfile
+import ssl
+import certifi
 
 # Import existing routers
 from api.customer_router import router as customer_router
@@ -33,6 +35,7 @@ from api.pdf_router import router as pdf_router
 from database.connection import engine, Base, get_db
 from services.call_session import CallSessionService
 from database.schemas import CallSessionBase
+from services.transcript_crud import create_session_message
 
 # Setup logging to both console and file
 logging.basicConfig(
@@ -174,7 +177,7 @@ active_connections = {}
 class GeminiLiveConnection:
     """Manages connection to Gemini Live API for a WebSocket client."""
     
-    def __init__(self, client_websocket: WebSocket):
+    def __init__(self, client_websocket: WebSocket, call_session_id: int):
         self.client_ws = client_websocket
         self.gemini_ws: Optional[object] = None
         self.is_connected = False
@@ -190,6 +193,7 @@ class GeminiLiveConnection:
         self.transcript_timeout = 2.0  # Seconds to wait before sending incomplete transcript
         self.last_rag_result = ""  # Store last RAG result for verification
         self.last_rag_query = ""   # Store last RAG query for verification
+        self.call_session_id = call_session_id  # Store call session ID for database operations
         
     async def connect_to_gemini(self):
         """Connect to Gemini Live API."""
@@ -197,8 +201,9 @@ class GeminiLiveConnection:
             ws_url = f'wss://{GEMINI_HOST}/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key={GOOGLE_API_KEY}'
             print(f"🔗 Connecting to Gemini Live...")
             logger.info("Connecting to Gemini Live API...")
-            
-            self.gemini_ws = await connect(ws_url)
+
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+            self.gemini_ws = await connect(ws_url, ssl=ssl_context)
             
             # Define RAG function for Gemini to call
             rag_function_declaration = {
@@ -351,18 +356,18 @@ class GeminiLiveConnection:
                 
                 # Debug: Check specifically for transcription fields
                 server_content = msg_data.get('serverContent', {})
-                if 'input_transcription' in server_content:
-                    print(f"🎯 Found input_transcription: {server_content['input_transcription']}")
-                if 'output_transcription' in server_content:
-                    print(f"🎯 Found output_transcription: {server_content['output_transcription']}")
-                if 'inputTranscription' in server_content:
-                    print(f"🎯 Found inputTranscription: {server_content['inputTranscription']}")
-                if 'outputTranscription' in server_content:
-                    print(f"🎯 Found outputTranscription: {server_content['outputTranscription']}")
+                # if 'input_transcription' in server_content:
+                #     print(f"🎯 Found input_transcription: {server_content['input_transcription']}")
+                # if 'output_transcription' in server_content:
+                #     print(f"🎯 Found output_transcription: {server_content['output_transcription']}")
+                # if 'inputTranscription' in server_content:
+                #     print(f"🎯 Found inputTranscription: {server_content['inputTranscription']}")
+                # if 'outputTranscription' in server_content:
+                #     print(f"🎯 Found outputTranscription: {server_content['outputTranscription']}")
                 
-                # Check all keys in serverContent
-                if server_content:
-                    print(f"🔑 serverContent keys: {list(server_content.keys())}")
+                # # Check all keys in serverContent
+                # if server_content:
+                #     print(f"🔑 serverContent keys: {list(server_content.keys())}")
                 
                 # Check for potential RAG-triggering content without function call
                 model_turn = server_content.get('modelTurn', {})
@@ -461,7 +466,7 @@ class GeminiLiveConnection:
                             
                             if audio_parts:
                                 audio_size = len(audio_parts[0]['inlineData'].get('data', ''))
-                                print(f"🔊 Gemini audio: {audio_size} chars")
+                                # print(f"🔊 Gemini audio: {audio_size} chars")
                     
                     if server_content.get('turnComplete'):
                         print(f"✅ Turn complete")
@@ -551,6 +556,23 @@ class GeminiLiveConnection:
                             # Store the transcript for potential supplementation
                             self.last_sent_transcript = cleaned_transcript
                             
+                            # Save user transcript to database
+                            try:
+                                db = next(get_db())
+                                create_session_message(
+                                    db=db,
+                                    session_id=self.call_session_id,
+                                    message=cleaned_transcript,
+                                    message_by="User"
+                                )
+                                print(f"💾 Saved user transcript to database")
+                            except Exception as e:
+                                print(f"❌ Error saving user transcript to database: {e}")
+                            finally:
+                                if db:
+                                    db.close()
+                            
+                            # Send to frontend
                             await self.client_ws.send_json({
                                 "type": "user_transcript",
                                 "content": cleaned_transcript
@@ -566,7 +588,7 @@ class GeminiLiveConnection:
             for field in output_transcript_fields:
                 if field in server_content:
                     transcript_data = server_content[field]
-                    print(f"🎯 Found AI transcript field '{field}': {transcript_data}")
+                    # print(f"🎯 Found AI transcript field '{field}': {transcript_data}")
                     
                     # Try different text field names
                     text_content = None
@@ -578,15 +600,33 @@ class GeminiLiveConnection:
                     if text_content:
                         # Accumulate AI transcript chunks
                         self.ai_transcript_buffer += text_content
-                        print(f"🤖 AI transcript chunk: \"{text_content}\" (buffer: \"{self.ai_transcript_buffer}\")")
+                        # print(f"🤖 AI transcript chunk: \"{text_content}\" (buffer: \"{self.ai_transcript_buffer}\")")
                         
                         # Only send transcript when we detect definitive end of sentence
                         # Remove timing-based sending to avoid premature messages
-                        if (text_content.endswith('.') or text_content.endswith('?') or text_content.endswith('!') or 
-                            text_content.endswith('\n')):
+                        if (text_content.endswith('.') or text_content.endswith('?') or 
+                            text_content.endswith('!') or text_content.endswith('\n')):
                             
                             if self.ai_transcript_buffer.strip():
                                 print(f"🤖 Sending complete AI transcript: \"{self.ai_transcript_buffer.strip()}\"")
+                                
+                                # Save AI transcript to database
+                                try:
+                                    db = next(get_db())
+                                    create_session_message(
+                                        db=db,
+                                        session_id=self.call_session_id,
+                                        message=self.ai_transcript_buffer.strip(),
+                                        message_by="AI"
+                                    )
+                                    print(f"💾 Saved AI transcript to database")
+                                except Exception as e:
+                                    print(f"❌ Error saving AI transcript to database: {e}")
+                                finally:
+                                    if db:
+                                        db.close()
+                                
+                                # Send to frontend
                                 await self.client_ws.send_json({
                                     "type": "text",
                                     "content": self.ai_transcript_buffer.strip()
@@ -854,10 +894,13 @@ class GeminiLiveConnection:
             
             # Handle text responses
             if text_response := extract_text_response(msg_data):
-                await self.client_ws.send_json({
-                    "type": "text",
-                    "content": text_response
-                })
+                # Clean the response before sending
+                cleaned_response = self._clean_debug_artifacts(text_response)
+                if cleaned_response:  # Only send if we have content after cleaning
+                    await self.client_ws.send_json({
+                        "type": "text",
+                        "content": cleaned_response
+                    })
             
             # Handle turn completion
             if 'turnComplete' in msg_data.get('serverContent', {}):
@@ -941,22 +984,33 @@ class GeminiLiveConnection:
         # Remove common debug patterns
         cleaned = text
         
-        # Remove tool_outputs patterns
-        cleaned = re.sub(r'```tool_outputs\s*{[^}]*}\s*```', '', cleaned)
+        # Remove tool_outputs code blocks
+        cleaned = re.sub(r'```tool_outputs\s*\n?.*?\n?```', '', cleaned, flags=re.DOTALL)
+        
+        # Remove JSON-like answer structures
+        cleaned = re.sub(r'\{"answer":\s*"([^"]+)"\}', r'\1', cleaned)
+        cleaned = re.sub(r'\{"answer":\s*"([^"]+)"\}', r'\1', cleaned)
+        
+        # Remove any remaining tool output patterns
         cleaned = re.sub(r'tool_outputs\s*{[^}]*}', '', cleaned)
+        cleaned = re.sub(r'\{"hits":[^\}]*\}', '', cleaned)
         
-        # Remove hits/query patterns
-        cleaned = re.sub(r"{'hits':\s*\[[^\]]*\]}", '', cleaned)
-        cleaned = re.sub(r'\bhits\b', '', cleaned)
+        # Remove any remaining backticks and code block markers
+        cleaned = re.sub(r'```[a-zA-Z]*\n?', '', cleaned)
+        cleaned = re.sub(r'```', '', cleaned)
         
-        # Remove any remaining curly brace artifacts
-        cleaned = re.sub(r'\{[^}]*\}', '', cleaned)
+        # Clean up any JSON artifacts
+        cleaned = re.sub(r'\{"[^"]+":"([^"]+)"\}', r'\1', cleaned)
+        cleaned = re.sub(r"{'[^']+':'([^']+)'}", r'\1', cleaned)
         
-        # Clean up extra whitespace
-        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+        # Clean up extra whitespace and newlines
+        cleaned = re.sub(r'\s+', ' ', cleaned)
+        cleaned = cleaned.strip()
         
         if cleaned != text:
-            print(f"🧹 Cleaned debug artifacts: '{text}' -> '{cleaned}'")
+            print(f"🧹 Cleaned debug artifacts from AI response:")
+            print(f"   Before: {text}")
+            print(f"   After:  {cleaned}")
         
         return cleaned
     
@@ -996,7 +1050,7 @@ class GeminiLiveConnection:
             try:
                 message = encode_audio_input(audio_data, INPUT_AUDIO_CONFIG)
                 await self.gemini_ws.send(json.dumps(message))
-                print(f"🎵 Audio sent: {len(audio_data)} bytes")
+                # print(f"🎵 Audio sent: {len(audio_data)} bytes")
                 
             except Exception as e:
                 logger.error(f"Error sending audio to Gemini: {e}")
@@ -1061,7 +1115,7 @@ async def websocket_endpoint(websocket: WebSocket, call_session_id: int):
     logger.info("Client connected to WebSocket")
     
     # Create Gemini connection for this client
-    connection = GeminiLiveConnection(websocket)
+    connection = GeminiLiveConnection(websocket, call_session_id)
     active_connections[websocket] = connection
     
     # Start listening for client messages immediately (don't wait for Gemini connection)
@@ -1107,7 +1161,7 @@ async def handle_client_message(connection: GeminiLiveConnection, data: dict):
                 try:
                     # Decode base64 audio data
                     audio_data = base64.b64decode(audio_b64)
-                    print(f"🎤 Received {len(audio_data)} bytes")
+                    # print(f"🎤 Received {len(audio_data)} bytes")
                     
                     # Convert the audio data to PCM format
                     pcm_data = await convert_audio_to_pcm(audio_data)
