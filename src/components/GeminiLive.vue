@@ -276,17 +276,8 @@ const setupWebSocket = (): Promise<void> => {
       callStore.connectCall()
 
 
-      // Send initial greeting with longer delay
-      setTimeout(() => {
-        if (websocket && websocket.readyState === WebSocket.OPEN) {
-          const greeting = {
-            type: "text",
-            content: "Hello! I'm ready to have a conversation.",
-          }
-          websocket.send(JSON.stringify(greeting))
-          console.log("Sent initial greeting to backend:", greeting)
-        }
-      }, 500)
+      // No initial greeting needed - backend will trigger AI greeting automatically
+      console.log("WebSocket ready - waiting for AI greeting")
 
       resolve()
     }
