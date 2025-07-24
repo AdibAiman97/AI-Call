@@ -4,9 +4,9 @@ from langchain.agents import AgentExecutor, create_tool_calling_agent, tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from sqlalchemy.orm import Session
-from api.models import CallSession
-from api.crud import create_session_message, update_session_summary, update_session_key_topics, get_message_by_id
-from api.models import get_db
+from database.models.call_session import CallSession
+from services.transcript_crud import create_session_message, update_session_summary, update_session_key_topics, get_message_by_id, get_session_messages
+from database.connection import get_db
 
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -28,7 +28,7 @@ def get_session_messages_tool(session_id: int, skip: int = 0, limit: int = 100) 
     """Retrieves messages for a specific session."""
     try:
         db = next(db_generator)
-        messages = db.query(CallSession).filter(CallSession.session_id == session_id).offset(skip).limit(limit).all()
+        messages = get_session_messages(db, session_id, skip, limit)
         return str(messages)
     except Exception as e:
         return f"Error: {str(e)}"
