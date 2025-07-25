@@ -55,7 +55,9 @@ if not GOOGLE_API_KEY:
 
 # Configuration
 GEMINI_HOST = 'generativelanguage.googleapis.com'
-GEMINI_MODEL = 'models/gemini-2.0-flash-live-001'
+# GEMINI_MODEL = 'models/gemini-2.0-flash-live-001'
+GEMINI_MODEL = 'models/gemini-2.5-flash-preview-native-audio-dialog'
+# GEMINI_MODEL = 'models/gemini-live-2.5-flash-preview'
 
 # VAD Configuration - Set to False if having voice detection issues
 ENABLE_VAD = True  # Change to False to disable VAD temporarily
@@ -260,8 +262,12 @@ class GeminiLiveConnection:
                     "generation_config": {
                         "response_modalities": ["AUDIO"],
                         "speech_config": {
-                            "voice_config": {"prebuilt_voice_config": {"voice_name": "Aoede"}}
-                        }
+                            "voice_config": {"prebuilt_voice_config": {"voice_name": "Kore"}}
+                        },
+                        "max_output_tokens": 500,
+                        "temperature": 0.7,
+                        "top_p": 0.95,
+                        "top_k": 3,
                     },
                     "output_audio_transcription": {},
                     "input_audio_transcription": {},
@@ -284,6 +290,9 @@ class GeminiLiveConnection:
                 print(f"🎙️ VAD enabled with HIGH sensitivity settings")
             else:
                 print(f"🎙️ VAD disabled - using continuous audio streaming")
+            
+            # 2. Property type preference (Semi-detached, Terrace, Bungalow, Apartments)
+            # 3. Purpose of purchase (investment, own stay, family)
             
             # Add system instruction and tools
             setup_message["setup"]["system_instruction"] = {
@@ -308,16 +317,13 @@ class GeminiLiveConnection:
                             CONVERSATION FLOW:
                             1. When prompted to greet, provide a warm welcome as Gina from Gamuda Cove sales gallery
                             2. For property questions, immediately search the knowledge base and provide specific information
-                            3. Focus on answering the user's specific questions with detailed property information  
-                            4. Guide them toward booking an appointment after providing the requested information
+                            3. Guide them toward booking an appointment after providing the requested information
 
                             APPOINTMENT BOOKING PROCESS:
                             When customers show interest, gather:
                             1. Their full name
-                            2. Property type preference (Semi-detached, Terrace, Bungalow, Apartments)
-                            3. Purpose of purchase (investment, own stay, family)
-                            4. Preferred appointment time
-                            5. Contact phone number
+                            2. Preferred appointment time
+                            3. Contact phone number
 
                             MANDATORY KNOWLEDGE BASE USAGE:
                             You MUST use the search_knowledge_base function for EVERY property-related query, even if you think you know the answer. This includes:
@@ -1579,364 +1585,6 @@ async def test_gemini_live_endpoint(request_data: dict):
             "status": "error",
             "error": str(e)
         }
-
-# @app.get("/", response_class=HTMLResponse)
-# async def get_index():
-    # """Serve the main HTML page."""
-    # html_content = """
-    # <!DOCTYPE html>
-    # <html>
-    # <head>
-    #     <title>Gemini Live API</title>
-    #     <meta charset="UTF-8">
-    #     <style>
-    #         body {
-    #             font-family: Arial, sans-serif;
-    #             max-width: 800px;
-    #             margin: 0 auto;
-    #             padding: 20px;
-    #             background-color: #f5f5f5;
-    #         }
-    #         .container {
-    #             background: white;
-    #             border-radius: 10px;
-    #             padding: 30px;
-    #             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    #         }
-    #         .header {
-    #             text-align: center;
-    #             margin-bottom: 30px;
-    #         }
-    #         .controls {
-    #             text-align: center;
-    #             margin: 20px 0;
-    #         }
-    #         button {
-    #             background: #4CAF50;
-    #             color: white;
-    #             border: none;
-    #             padding: 15px 30px;
-    #             font-size: 16px;
-    #             border-radius: 5px;
-    #             cursor: pointer;
-    #             margin: 0 10px;
-    #         }
-    #         button:disabled {
-    #             background: #cccccc;
-    #             cursor: not-allowed;
-    #         }
-    #         button.stop {
-    #             background: #f44336;
-    #         }
-    #         .status {
-    #             text-align: center;
-    #             margin: 20px 0;
-    #             padding: 10px;
-    #             border-radius: 5px;
-    #         }
-    #         .status.connected {
-    #             background: #d4edda;
-    #             color: #155724;
-    #             border: 1px solid #c3e6cb;
-    #         }
-    #         .status.error {
-    #             background: #f8d7da;
-    #             color: #721c24;
-    #             border: 1px solid #f5c6cb;
-    #         }
-    #         .status.info {
-    #             background: #d1ecf1;
-    #             color: #0c5460;
-    #             border: 1px solid #bee5eb;
-    #         }
-    #         .conversation {
-    #             border: 1px solid #ddd;
-    #             border-radius: 5px;
-    #             padding: 20px;
-    #             height: 300px;
-    #             overflow-y: auto;
-    #             margin: 20px 0;
-    #             background: #fafafa;
-    #         }
-    #         .message {
-    #             margin: 10px 0;
-    #             padding: 8px 12px;
-    #             border-radius: 5px;
-    #         }
-    #         .message.user {
-    #             background: #007bff;
-    #             color: white;
-    #             margin-left: 20%;
-    #         }
-    #         .message.gemini {
-    #             background: #28a745;
-    #             color: white;
-    #             margin-right: 20%;
-    #         }
-    #         .message.system {
-    #             background: #6c757d;
-    #             color: white;
-    #             text-align: center;
-    #             font-style: italic;
-    #         }
-    #         .audio-visualizer {
-    #             width: 100px;
-    #             height: 100px;
-    #             border: 3px solid #4CAF50;
-    #             border-radius: 50%;
-    #             margin: 20px auto;
-    #             position: relative;
-    #             display: none;
-    #         }
-    #         .audio-visualizer.active {
-    #             display: block;
-    #             animation: pulse 1s infinite;
-    #         }
-    #         @keyframes pulse {
-    #             0% { transform: scale(1); border-color: #4CAF50; }
-    #             50% { transform: scale(1.05); border-color: #45a049; }
-    #             100% { transform: scale(1); border-color: #4CAF50; }
-    #         }
-    #     </style>
-    # </head>
-    # <body>
-    #     <div class="container">
-    #         <div class="header">
-    #             <h1>🎤 Gemini Live API</h1>
-    #             <p>Voice conversation with Google Gemini AI</p>
-    #         </div>
-            
-    #         <div class="controls">
-    #             <button id="startBtn" onclick="startConversation()">Start Conversation</button>
-    #             <button id="stopBtn" onclick="stopConversation()" disabled class="stop">Stop Conversation</button>
-    #         </div>
-            
-    #         <div class="audio-visualizer" id="visualizer"></div>
-            
-    #         <div class="status" id="status">Ready to connect</div>
-            
-    #         <div class="conversation" id="conversation">
-    #             <div class="message system">Conversation will appear here...</div>
-    #         </div>
-    #     </div>
-
-    #     <script>
-    #         let websocket = null;
-    #         let mediaRecorder = null;
-    #         let audioContext = null;
-    #         let isRecording = false;
-
-    #         function addMessage(content, type = 'system') {
-    #             const conversation = document.getElementById('conversation');
-    #             const message = document.createElement('div');
-    #             message.className = `message ${type}`;
-    #             message.textContent = content;
-    #             conversation.appendChild(message);
-    #             conversation.scrollTop = conversation.scrollHeight;
-    #         }
-
-    #         function updateStatus(message, type = 'info') {
-    #             const status = document.getElementById('status');
-    #             status.textContent = message;
-    #             status.className = `status ${type}`;
-    #         }
-
-    #         function toggleVisualizer(show) {
-    #             const visualizer = document.getElementById('visualizer');
-    #             visualizer.className = show ? 'audio-visualizer active' : 'audio-visualizer';
-    #         }
-
-    #         async function startConversation() {
-    #             try {
-    #                 updateStatus('Connecting to server...', 'info');
-                    
-    #                 // Connect to WebSocket
-    #                 websocket = new WebSocket(`ws://${window.location.host}/ws`);
-                    
-    #                 websocket.onopen = async () => {
-    #                     updateStatus('Connected! Starting audio...', 'connected');
-    #                     await setupAudio();
-    #                 };
-                    
-    #                 websocket.onmessage = (event) => {
-    #                     const data = JSON.parse(event.data);
-    #                     handleServerMessage(data);
-    #                 };
-                    
-    #                 websocket.onerror = (error) => {
-    #                     updateStatus('Connection error', 'error');
-    #                     console.error('WebSocket error:', error);
-    #                 };
-                    
-    #                 websocket.onclose = () => {
-    #                     updateStatus('Connection closed', 'info');
-    #                     stopConversation();
-    #                 };
-                    
-    #             } catch (error) {
-    #                 updateStatus(`Error: ${error.message}`, 'error');
-    #             }
-    #         }
-
-    #         async function setupAudio() {
-    #             try {
-    #                 const stream = await navigator.mediaDevices.getUserMedia({
-    #                     audio: {
-    #                         sampleRate: 16000,
-    #                         channelCount: 1,
-    #                         echoCancellation: true,
-    #                         noiseSuppression: true
-    #                     }
-    #                 });
-
-    #                 mediaRecorder = new MediaRecorder(stream, {
-    #                     mimeType: 'audio/webm;codecs=opus'
-    #                 });
-
-    #                 mediaRecorder.ondataavailable = async (event) => {
-    #                     if (event.data.size > 0 && websocket?.readyState === WebSocket.OPEN) {
-    #                         const audioBuffer = await event.data.arrayBuffer();
-    #                         const audioData = new Uint8Array(audioBuffer);
-    #                         const base64Audio = btoa(String.fromCharCode(...audioData));
-                            
-    #                         websocket.send(JSON.stringify({
-    #                             type: 'audio',
-    #                             data: base64Audio
-    #                         }));
-    #                     }
-    #                 };
-
-    #                 mediaRecorder.start(250); // Send data every 250ms
-    #                 isRecording = true;
-                    
-    #                 document.getElementById('startBtn').disabled = true;
-    #                 document.getElementById('stopBtn').disabled = false;
-                    
-    #                 toggleVisualizer(true);
-    #                 updateStatus('Recording... You can speak now!', 'connected');
-    #                 addMessage('Conversation started - you can speak now', 'system');
-
-    #             } catch (error) {
-    #                 updateStatus(`Microphone error: ${error.message}`, 'error');
-    #             }
-    #         }
-
-    #         function handleServerMessage(data) {
-    #             switch (data.type) {
-    #                 case 'audio':
-    #                     playAudio(data.data, data.config);
-    #                     break;
-    #                 case 'text':
-    #                     addMessage(data.content, 'gemini');
-    #                     break;
-    #                 case 'turn_complete':
-    #                     updateStatus(data.message, 'connected');
-    #                     break;
-    #                 case 'interrupted':
-    #                     addMessage(data.message, 'system');
-    #                     break;
-    #                 case 'error':
-    #                     updateStatus(data.message, 'error');
-    #                     addMessage(`Error: ${data.message}`, 'system');
-    #                     break;
-    #             }
-    #         }
-
-    #         function playAudio(base64Data, config) {
-    #             try {
-    #                 const binaryString = atob(base64Data);
-    #                 const bytes = new Uint8Array(binaryString.length);
-    #                 for (let i = 0; i < binaryString.length; i++) {
-    #                     bytes[i] = binaryString.charCodeAt(i);
-    #                 }
-
-    #                 // Create WAV file
-    #                 const wavBuffer = createWavBuffer(bytes, config.sample_rate);
-    #                 const blob = new Blob([wavBuffer], { type: 'audio/wav' });
-    #                 const audioUrl = URL.createObjectURL(blob);
-
-    #                 const audio = new Audio(audioUrl);
-    #                 audio.onended = () => URL.revokeObjectURL(audioUrl);
-    #                 audio.play().catch(console.error);
-
-    #             } catch (error) {
-    #                 console.error('Audio playback error:', error);
-    #             }
-    #         }
-
-    #         function createWavBuffer(pcmData, sampleRate) {
-    #             const buffer = new ArrayBuffer(44 + pcmData.length);
-    #             const view = new DataView(buffer);
-                
-    #             // WAV header
-    #             const writeString = (offset, string) => {
-    #                 for (let i = 0; i < string.length; i++) {
-    #                     view.setUint8(offset + i, string.charCodeAt(i));
-    #                 }
-    #             };
-
-    #             writeString(0, 'RIFF');
-    #             view.setUint32(4, 36 + pcmData.length, true);
-    #             writeString(8, 'WAVE');
-    #             writeString(12, 'fmt ');
-    #             view.setUint32(16, 16, true);
-    #             view.setUint16(20, 1, true);
-    #             view.setUint16(22, 1, true);
-    #             view.setUint32(24, sampleRate, true);
-    #             view.setUint32(28, sampleRate * 2, true);
-    #             view.setUint16(32, 2, true);
-    #             view.setUint16(34, 16, true);
-    #             writeString(36, 'data');
-    #             view.setUint32(40, pcmData.length, true);
-
-    #             const uint8View = new Uint8Array(buffer, 44);
-    #             uint8View.set(pcmData);
-
-    #             return buffer;
-    #         }
-
-    #         function stopConversation() {
-    #             isRecording = false;
-    #             toggleVisualizer(false);
-                
-    #             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    #                 mediaRecorder.stop();
-    #                 mediaRecorder.stream.getTracks().forEach(track => track.stop());
-    #             }
-                
-    #             if (websocket) {
-    #                 websocket.close();
-    #                 websocket = null;
-    #             }
-                
-    #             document.getElementById('startBtn').disabled = false;
-    #             document.getElementById('stopBtn').disabled = true;
-                
-    #             updateStatus('Conversation stopped', 'info');
-    #             addMessage('Conversation ended', 'system');
-    #         }
-
-    #         // Send initial message when connection is established
-    #         function sendInitialMessage() {
-    #             if (websocket?.readyState === WebSocket.OPEN) {
-    #                 websocket.send(JSON.stringify({
-    #                     type: 'text',
-    #                     content: 'Hello! I\'m ready to have a conversation.'
-    #                 }));
-    #             }
-    #         }
-
-    #         // Auto-send initial message after connection
-    #         setTimeout(() => {
-    #             if (websocket?.readyState === WebSocket.OPEN && isRecording) {
-    #                 sendInitialMessage();
-    #             }
-    #         }, 1000);
-    #     </script>
-    # </body>
-    # </html>
-    # """
-    # return HTMLResponse(content=html_content)
 
 if __name__ == "__main__":
     import uvicorn
