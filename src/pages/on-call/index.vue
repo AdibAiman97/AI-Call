@@ -23,9 +23,16 @@
           </TresCanvas>
         </div>
         <h1 class="d-flex align-center justify-center pt-2">
-          {{ callStore.status === 'connecting' ? 'Connecting to AI Agent...' : 'AI Agent' }}
+          {{
+            callStore.status === "connecting"
+              ? "Connecting to AI Agent..."
+              : "AI Agent"
+          }}
         </h1>
-        <div v-if="callStore.status === 'connecting'" class="connecting-indicator">
+        <div
+          v-if="callStore.status === 'connecting'"
+          class="connecting-indicator"
+        >
           <div class="connecting-dots">
             <div class="dot"></div>
             <div class="dot"></div>
@@ -75,7 +82,7 @@ import { TresCanvas } from "@tresjs/core";
 import DancingBlob from "@/components/DancingBlob.vue";
 import GeminiLive from "../../components/GeminiLive.vue";
 import Chat from "@/components/Chat.vue";
-import { useHotkey } from '@/utils/Hotkey'
+import { useHotkey } from "@/utils/Hotkey";
 
 const router = useRouter();
 const callStore = useCallStore();
@@ -86,10 +93,14 @@ const isEnding = ref(false);
 const analyser = ref<AnalyserNode | null>(null);
 const dataArray = ref<Uint8Array | null>(null);
 
-useHotkey('g', () => {
-  console.log('call-summary')
-  router.push('/call-summary')
-}, { shift: false, command: true })
+useHotkey(
+  "g",
+  () => {
+    console.log("call-summary");
+    router.push("/call-summary");
+  },
+  { shift: false, command: true }
+);
 
 const displayTime = computed(() => {
   if (callStore.status === "idle") {
@@ -115,7 +126,10 @@ const endCall = async () => {
 };
 
 // Function to receive audio analysis data from GeminiLive
-const setupBlobAnalyser = (newAnalyser: AnalyserNode, newDataArray: Uint8Array) => {
+const setupBlobAnalyser = (
+  newAnalyser: AnalyserNode,
+  newDataArray: Uint8Array
+) => {
   analyser.value = newAnalyser;
   dataArray.value = newDataArray;
   console.log("✅ Blob analyser connected from GeminiLive");
@@ -123,7 +137,7 @@ const setupBlobAnalyser = (newAnalyser: AnalyserNode, newDataArray: Uint8Array) 
 
 // Expose function to GeminiLive component
 defineExpose({
-  setupBlobAnalyser
+  setupBlobAnalyser,
 });
 
 // Lifecycle
@@ -137,7 +151,7 @@ onMounted(async () => {
   // Set up parent-child communication with GeminiLive
   if (geminiLiveRef.value?.setParentComponent) {
     geminiLiveRef.value.setParentComponent({
-      setupBlobAnalyser
+      setupBlobAnalyser,
     });
   }
 });
@@ -146,7 +160,7 @@ onMounted(async () => {
 watch(geminiLiveRef, (newRef) => {
   if (newRef?.setParentComponent) {
     newRef.setParentComponent({
-      setupBlobAnalyser
+      setupBlobAnalyser,
     });
   }
 });
@@ -218,7 +232,6 @@ onUnmounted(() => {
   }
 }
 </style>
-
 
 <!-- <script setup lang="ts">
 import { Volume2, Phone } from "lucide-vue-next";
@@ -466,4 +479,4 @@ onBeforeUnmount(() => {
     callStore.endCall();
   }
 });
-</script>
+<!-- </script> -->
