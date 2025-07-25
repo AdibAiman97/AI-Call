@@ -41,10 +41,13 @@ class ContinuousAudioPlayer {
   private isPlaying = false
   private audioContext: AudioContext | null = null
 
+  private nextChunkTime = 0
+
   constructor() {
     this.audioContext = new AudioContext({
       sampleRate: OUTPUT_AUDIO_CONFIG.sampleRate,
     })
+    this.nextChunkTime = this.audioContext.currentTime
   }
 
   async start() {
@@ -63,6 +66,15 @@ class ContinuousAudioPlayer {
   enqueueAudio(audioData: ArrayBuffer) {
     this.queue.push(audioData)
     console.log(`Enqueued audio chunk, queue length: ${this.queue.length}`)
+  }
+
+  clearQueue() {
+    this.queue = []
+
+    if(this.audioContext) {
+      this.nextChunkTime = this.audioContext.currentTime
+    }
+    console.log("Audio queue cleared")
   }
 
   private async playbackLoop() {
@@ -99,6 +111,11 @@ class ContinuousAudioPlayer {
       const source = this.audioContext.createBufferSource()
       source.buffer = audioBuffer
       source.connect(this.audioContext.destination)
+
+      if (this.nextChunkTime < this.audioContext.currentTime) {
+        this.nextChunkTime = this.audioContext.currentTime
+      }
+
       source.start()
 
       // Wait for this chunk to finish playing
@@ -253,6 +270,27 @@ const handleBackendTextResponse = (response: any) => {
   }
 }
 
+// Handle interruption - clear audio queue and stop playback
+const handleInterruption = async () => {
+  try {
+    console.log("Handling interruption - clearing audio queue and stopping playback")
+    
+    // Clear the audio queue immediately
+    if (continuousAudioPlayer) {
+      continuousAudioPlayer.clearQueue()
+      console.log("Audio queue cleared")
+    }
+    
+    // Clear any local audio buffer
+    audioBuffer = []
+    bufferSize = 0
+    console.log("Local audio buffer cleared")
+    
+  } catch (error) {
+    console.error("Error handling interruption:", error)
+  }
+}
+
 // Convert base64 to ArrayBuffer
 const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
   const binaryString = atob(base64)
@@ -318,6 +356,8 @@ const setupWebSocket = (): Promise<void> => {
             break
           case "interrupted":
             console.log("Response interrupted")
+            // Clear audio queue and stop playback when interrupted
+            await handleInterruption()
             break
           case "error":
             callStore.setError(response.message || "Error occurred")
