@@ -1,5 +1,6 @@
 <!-- Github Luckystriike: https://github.com/luckystriike22/TresJsPlayground/ -->
 <script lang="ts" setup>
+import { ref, computed, watch, shallowRef } from 'vue';
 import { Vector2, Vector3 } from "three";
 import vertexShader from "./shaders/vertex.glsl?raw";
 import fragmentShader from "./shaders/fragment.glsl?raw";
@@ -10,7 +11,7 @@ import { useTheme } from 'vuetify';
 const props = defineProps<{
   analyser: any;
   dataArray: any;
-  isAudioPlaying?: boolean; // Optional prop to detect if AI is speaking
+  isAudioPlaying?: boolean;
 }>();
 
 // ===== COLOR CONFIGURATION =====
@@ -49,7 +50,7 @@ onBeforeRender(({ elapsed }) => {
       uniforms.value.u_frequency.value =
         sum > 0 ? sum / props.dataArray?.length : 0;
       
-      // Faster rotation when speaking
+      // Faster rotation when AI is speaking
       blobRef.value.rotation.x += 0.02;
       blobRef.value.rotation.y += 0.01;
     } else {

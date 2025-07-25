@@ -40,16 +40,35 @@ class ContinuousAudioPlayer {
   private queue: ArrayBuffer[] = []
   private isPlaying = false
   private audioContext: AudioContext | null = null
+  private analyser: AnalyserNode | null = null
+  private dataArray: Uint8Array | null = null
 
   private nextChunkTime = 0
 
-  constructor() {
+  constructor(callStore?: any, parentComponent?: any) {
     this.audioContext = new AudioContext({
       sampleRate: OUTPUT_AUDIO_CONFIG.sampleRate,
       latencyHint: 'interactive', // Optimize for low latency
     })
     this.nextChunkTime = this.audioContext.currentTime
+    this.callStore = callStore
+    this.parentComponent = parentComponent
+    
+    // Create analyser for blob visualization
+    this.analyser = this.audioContext.createAnalyser()
+    this.analyser.fftSize = 256
+    this.analyser.smoothingTimeConstant = 0.8
+    const bufferLength = this.analyser.frequencyBinCount
+    this.dataArray = new Uint8Array(bufferLength)
+    
+    // Connect analyser to parent component for blob visualization
+    if (this.parentComponent && this.parentComponent.setupBlobAnalyser) {
+      this.parentComponent.setupBlobAnalyser(this.analyser, this.dataArray)
+    }
   }
+
+  private callStore: any = null
+  private parentComponent: any = null
 
   async start() {
     this.isPlaying = true
@@ -80,6 +99,12 @@ class ContinuousAudioPlayer {
     if(this.audioContext) {
       this.nextChunkTime = this.audioContext.currentTime
     }
+    
+    // Stop playing state when queue is cleared
+    if (this.callStore) {
+      this.callStore.setPlayingAudio(false)
+    }
+    
     console.log("Audio queue cleared")
   }
 
@@ -126,9 +151,15 @@ class ContinuousAudioPlayer {
       filter.frequency.setValueAtTime(8000, this.audioContext.currentTime) // Cut frequencies above 8kHz
       filter.Q.setValueAtTime(1, this.audioContext.currentTime)
       
-      // Connect: source -> filter -> destination
+      // Connect: source -> filter -> analyser -> destination
       source.connect(filter)
-      filter.connect(this.audioContext.destination)
+      
+      if (this.analyser) {
+        filter.connect(this.analyser)
+        this.analyser.connect(this.audioContext.destination)
+      } else {
+        filter.connect(this.audioContext.destination)
+      }
 
       // Ensure proper timing - don't let chunks overlap or have gaps
       if (this.nextChunkTime < this.audioContext.currentTime) {
@@ -137,6 +168,19 @@ class ContinuousAudioPlayer {
 
       // Start audio at precisely the scheduled time
       source.start(this.nextChunkTime)
+      
+      // Set audio playing state when audio starts
+      if (this.callStore) {
+        this.callStore.setPlayingAudio(true)
+      }
+      
+      // Handle when audio finishes playing
+      source.onended = () => {
+        // Only stop playing state if no more audio is queued
+        if (this.queue.length === 0 && this.callStore) {
+          this.callStore.setPlayingAudio(false)
+        }
+      }
       
       // Calculate actual duration and update next chunk time
       const duration = float32Array.length / OUTPUT_AUDIO_CONFIG.sampleRate
@@ -267,6 +311,9 @@ const sendBufferedAudioChunk = () => {
   }
 }
 
+// Store reference to parent component for blob analyser connection
+let parentComponentRef: any = null
+
 // Handle audio response from FastAPI backend
 const handleBackendAudioResponse = async (response: any) => {
   try {
@@ -274,9 +321,9 @@ const handleBackendAudioResponse = async (response: any) => {
 
     // Initialize continuous audio player if needed
     if (!continuousAudioPlayer) {
-      continuousAudioPlayer = new ContinuousAudioPlayer()
+      continuousAudioPlayer = new ContinuousAudioPlayer(callStore, parentComponentRef)
       await continuousAudioPlayer.start()
-      console.log("Started continuous audio player")
+      console.log("Started continuous audio player with internal analyser")
     }
 
     // Add to continuous playback queue
@@ -505,10 +552,14 @@ watch(() => callStore.isMuted, (isMuted) => {
   console.log(`Mute status changed: ${isMuted}`)
 })
 
-// Expose methods for parent components
+// Expose methods for parent components and accept parent ref
 defineExpose({
   startConversation,
   stopConversation,
+  setParentComponent: (parent: any) => {
+    parentComponentRef = parent
+    console.log("✅ Parent component reference set for blob analyser")
+  }
 })
 
 // Lifecycle

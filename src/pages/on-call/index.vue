@@ -11,7 +11,7 @@
 
       <div class="d-flex flex-column align-center justify-center">
         <!-- DANCING BLOB -->
-        <!-- <div class="dancing-blob-container">
+        <div class="dancing-blob-container">
           <TresCanvas :alpha="true">
             <Suspense>
               <DancingBlob
@@ -21,7 +21,7 @@
               />
             </Suspense>
           </TresCanvas>
-        </div> -->
+        </div>
         <h1 class="d-flex align-center justify-center pt-2">
           {{ callStore.status === 'connecting' ? 'Connecting to AI Agent...' : 'AI Agent' }}
         </h1>
@@ -65,6 +65,154 @@
     <GeminiLive ref="geminiLiveRef" />
   </div>
 </template>
+
+<script lang="ts" setup>
+import { ref, computed, onMounted, onUnmounted } from "vue";
+import { useRouter } from "vue-router";
+import { useCallStore } from "@/stores/call";
+import { Volume2, Phone } from "lucide-vue-next";
+import { TresCanvas } from "@tresjs/core";
+import DancingBlob from "@/components/DancingBlob.vue";
+import GeminiLive from "../../components/GeminiLive.vue";
+import Chat from "@/components/Chat.vue";
+
+const router = useRouter();
+const callStore = useCallStore();
+const geminiLiveRef = ref();
+const isEnding = ref(false);
+
+// Audio analysis for dancing blob - these will be provided by GeminiLive
+const analyser = ref<AnalyserNode | null>(null);
+const dataArray = ref<Uint8Array | null>(null);
+
+const displayTime = computed(() => {
+  if (callStore.status === "idle") {
+    return "00:00";
+  }
+  return callStore.formattedDuration;
+});
+
+const endCall = async () => {
+  isEnding.value = true;
+
+  try {
+    // Stop the call
+    callStore.endCall();
+
+    // Navigate back to landing page
+    await router.push("/");
+  } catch (error) {
+    console.error("Error ending call:", error);
+  } finally {
+    isEnding.value = false;
+  }
+};
+
+// Function to receive audio analysis data from GeminiLive
+const setupBlobAnalyser = (newAnalyser: AnalyserNode, newDataArray: Uint8Array) => {
+  analyser.value = newAnalyser;
+  dataArray.value = newDataArray;
+  console.log("✅ Blob analyser connected from GeminiLive");
+};
+
+// Expose function to GeminiLive component
+defineExpose({
+  setupBlobAnalyser
+});
+
+// Lifecycle
+onMounted(async () => {
+  // If no call is in progress, redirect to landing page
+  if (callStore.status === "idle") {
+    await router.push("/");
+    return;
+  }
+
+  // Set up parent-child communication with GeminiLive
+  if (geminiLiveRef.value?.setParentComponent) {
+    geminiLiveRef.value.setParentComponent({
+      setupBlobAnalyser
+    });
+  }
+});
+
+// Watch for GeminiLive component ref to become available
+watch(geminiLiveRef, (newRef) => {
+  if (newRef?.setParentComponent) {
+    newRef.setParentComponent({
+      setupBlobAnalyser
+    });
+  }
+});
+
+onUnmounted(() => {
+  // No cleanup needed - GeminiLive handles its own AudioContext
+});
+
+// Route guard to prevent direct access
+// This would typically be handled by Vue Router navigation guards
+</script>
+
+<style scoped>
+.dancing-blob-container {
+  width: 400px;
+  height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
+  background: transparent;
+  overflow: hidden;
+}
+
+.dancing-blob-container canvas {
+  background: transparent !important;
+}
+
+.connecting-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.connecting-dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+}
+
+.connecting-dots .dot {
+  width: 8px;
+  height: 8px;
+  background: #64ffda;
+  border-radius: 50%;
+  animation: dot-pulse 1.4s ease-in-out infinite both;
+}
+
+.connecting-dots .dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.connecting-dots .dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes dot-pulse {
+  0%,
+  80%,
+  100% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+</style>
+
 
 <!-- <script setup lang="ts">
 import { Volume2, Phone } from "lucide-vue-next";
@@ -312,6 +460,7 @@ onBeforeUnmount(() => {
     callStore.endCall();
   }
 });
+<<<<<<< Updated upstream
 </script> -->
 
 <script lang="ts" setup>
@@ -501,3 +650,6 @@ onUnmounted(() => {
   }
 }
 </style>
+=======
+</script> -->
+>>>>>>> Stashed changes

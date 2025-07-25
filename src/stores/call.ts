@@ -6,6 +6,7 @@ export const useCallStore = defineStore('call', {
     status: 'idle',
     isRecording: false,
     isMuted: false,
+    isPlayingAudio: false,
     startTime: null,
     duration: 0,
     messages: [],
@@ -52,6 +53,7 @@ export const useCallStore = defineStore('call', {
       this.status = 'idle'
       this.isRecording = false
       this.isMuted = false
+      this.isPlayingAudio = false
       this._stopTimer()
     },
 
@@ -73,6 +75,10 @@ export const useCallStore = defineStore('call', {
 
     setRecording(recording: boolean) {
       this.isRecording = recording
+    },
+
+    setPlayingAudio(playing: boolean) {
+      this.isPlayingAudio = playing
     },
 
     // Message management
@@ -126,6 +132,7 @@ export const useCallStore = defineStore('call', {
       this.status = 'idle'
       this.isRecording = false
       this.isMuted = false
+      this.isPlayingAudio = false
       this.startTime = null
       this.duration = 0
       this.messages = []

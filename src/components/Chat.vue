@@ -3,47 +3,32 @@
     <!-- Chat Header -->
     <div class="chat-header">
       <v-icon class="me-2 text-white">mdi-robot</v-icon>
-      <span class="font-weight-medium text-white">Voice Assistant</span>
+      <span class="font-weight-medium text-white">AI Transcript</span>
       <v-spacer />
       <v-chip
         :color="messages.length > 0 ? 'success' : 'grey'"
         size="small"
         variant="flat"
       >
-        {{ messages.length }} messages
+        {{ messages.length }} responses
       </v-chip>
     </div>
 
     <!-- Chat Messages Area -->
     <div ref="messagesContainer" class="chat-messages">
       <div v-if="messages.length === 0" class="empty-state">
-        <v-icon color="grey" size="64">mdi-chat-outline</v-icon>
-        <p class="text-grey mt-4">Start a conversation...</p>
+        <v-icon color="grey" size="64">mdi-robot-outline</v-icon>
+        <p class="text-grey mt-4">Waiting for AI response...</p>
       </div>
 
       <div v-else class="messages-list">
         <div
           v-for="message in messages"
           :key="message.id"
-          class="message-wrapper"
-          :class="message.type"
+          class="message-wrapper ai"
         >
-          <!-- User Message -->
-          <div v-if="message.type === 'user'" class="message-bubble user-message">
-            <div class="message-header">
-              <v-icon class="mr-1" size="16">mdi-microphone</v-icon>
-              <span class="message-label">You said</span>
-            </div>
-            <div class="message-content">
-              {{ message.content }}
-            </div>
-            <div class="message-time">
-              {{ formatTime(new Date(message.timestamp)) }}
-            </div>
-          </div>
-
-          <!-- AI Message -->
-          <div v-else class="message-bubble ai-message">
+          <!-- AI Message Only -->
+          <div class="message-bubble ai-message">
             <div class="message-avatar">
               <v-avatar color="surface" size="32">
                 <v-icon color="white">mdi-robot</v-icon>
@@ -76,8 +61,8 @@
   const callStore = useCallStore()
   const messagesContainer = ref<HTMLDivElement | null>(null)
 
-  // Computed properties
-  const messages = computed(() => callStore.messages)
+  // Computed properties - show only AI messages
+  const messages = computed(() => callStore.messages.filter(msg => msg.type === 'ai'))
 
   // Helper function to format time
   const formatTime = (date: Date) => {
@@ -156,10 +141,6 @@
   width: 100%;
 }
 
-.message-wrapper.user {
-  justify-content: flex-end;
-}
-
 .message-wrapper.ai {
   justify-content: flex-start;
 }
@@ -169,22 +150,6 @@
   word-wrap: break-word;
 }
 
-.user-message {
-  background-color: rgb(var(--v-theme-primary));
-  color: white;
-  border-radius: 18px 18px 4px 18px;
-  padding: 12px 16px;
-  margin-left: auto;
-  border: 1px solid rgba(var(--v-theme-primary), 0.3);
-}
-
-.user-message .message-header {
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.user-message .message-label {
-  color: rgba(255, 255, 255, 0.9);
-}
 
 .ai-message {
   display: flex;
