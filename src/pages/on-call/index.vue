@@ -66,6 +66,194 @@
   </div>
 </template>
 
+<script lang="ts" setup>
+import { ref, computed, onMounted, onUnmounted } from "vue";
+import { useRouter } from "vue-router";
+import { useCallStore } from "@/stores/call";
+import { Volume2, Phone } from "lucide-vue-next";
+// import CallTimer from "@/components/CallTimer.vue";
+// import CallTranscript from "@/components/CallTranscript.vue";
+import GeminiLive from "../../components/GeminiLive.vue";
+
+import { useHotkey } from '@/utils/Hotkey'
+
+const router = useRouter();
+const callStore = useCallStore();
+const transcriptRef = ref();
+const geminiLiveRef = ref();
+const isEnding = ref(false);
+const isProcessing = ref(false);
+
+useHotkey('g', () => {
+  console.log('call-summary')
+  router.push('/call-summary')
+}, { shift: false, command: true })
+
+const displayTime = computed(() => {
+  if (callStore.status === "idle") {
+    return "00:00";
+  }
+  return callStore.formattedDuration;
+});
+
+// Computed properties
+const statusTitle = computed(() => {
+  switch (callStore.status) {
+    case "connecting":
+      return "Connecting...";
+    case "connected":
+      return callStore.isMuted ? "Muted" : "Listening";
+    case "error":
+      return "Connection Error";
+    default:
+      return "Ready";
+  }
+});
+
+const statusSubtitle = computed(() => {
+  switch (callStore.status) {
+    case "connecting":
+      return "Setting up your voice connection";
+    case "connected":
+      return callStore.isMuted
+        ? "Microphone is muted"
+        : "Speak naturally to the assistant";
+    case "error":
+      return "Please try reconnecting";
+    default:
+      return "Voice assistant ready";
+  }
+});
+
+const visualizerIcon = computed(() => {
+  if (callStore.status === "error") return "mdi-microphone-off";
+  if (callStore.isMuted) return "mdi-microphone-off";
+  if (callStore.isRecording) return "mdi-microphone";
+  return "mdi-microphone-outline";
+});
+
+const visualizerIconColor = computed(() => {
+  if (callStore.status === "error") return "error";
+  if (callStore.isMuted) return "warning";
+  if (callStore.isActive) return "primary";
+  return "grey";
+});
+
+// Methods
+const toggleMute = () => {
+  callStore.toggleMute();
+};
+
+const endCall = async () => {
+  isEnding.value = true;
+
+  try {
+    // Stop the call
+    callStore.endCall();
+
+    // Navigate back to landing page
+    await router.push("/");
+  } catch (error) {
+    console.error("Error ending call:", error);
+  } finally {
+    isEnding.value = false;
+  }
+};
+
+const handleBackButton = async () => {
+  if (callStore.isActive) {
+    // Show confirmation dialog if call is active
+    const confirmed = confirm("Are you sure you want to end the call?");
+    if (!confirmed) return;
+  }
+
+  await endCall();
+};
+
+const clearTranscript = () => {
+  callStore.clearMessages();
+};
+
+// Lifecycle
+onMounted(async () => {
+  // If no call is in progress, redirect to landing page
+  if (callStore.status === "idle") {
+    await router.push("/");
+    return;
+  }
+
+  // Note: The actual WebSocket connection will be handled by the GeminiLive component
+  // which watches for status changes and starts when status is 'connecting'
+});
+
+onUnmounted(() => {
+  // Cleanup if needed
+});
+
+// Route guard to prevent direct access
+// This would typically be handled by Vue Router navigation guards
+</script>
+
+<style scoped>
+.dancing-blob-container {
+  width: 400px;
+  height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
+  background: transparent;
+  overflow: hidden;
+}
+
+.dancing-blob-container canvas {
+  background: transparent !important;
+}
+
+.connecting-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.connecting-dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+}
+
+.connecting-dots .dot {
+  width: 8px;
+  height: 8px;
+  background: #64ffda;
+  border-radius: 50%;
+  animation: dot-pulse 1.4s ease-in-out infinite both;
+}
+
+.connecting-dots .dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.connecting-dots .dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes dot-pulse {
+  0%,
+  80%,
+  100% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+</style>
+
 <!-- <script setup lang="ts">
 import { Volume2, Phone } from "lucide-vue-next";
 import { useCallStore } from "@/stores/call_prev";
@@ -313,191 +501,3 @@ onBeforeUnmount(() => {
   }
 });
 </script> -->
-
-<script lang="ts" setup>
-import { ref, computed, onMounted, onUnmounted } from "vue";
-import { useRouter } from "vue-router";
-import { useCallStore } from "@/stores/call";
-import { Volume2, Phone } from "lucide-vue-next";
-// import CallTimer from "@/components/CallTimer.vue";
-// import CallTranscript from "@/components/CallTranscript.vue";
-import GeminiLive from "../../components/GeminiLive.vue";
-
-import { useHotkey } from '@/utils/Hotkey'
-
-const router = useRouter();
-const callStore = useCallStore();
-const transcriptRef = ref();
-const geminiLiveRef = ref();
-const isEnding = ref(false);
-const isProcessing = ref(false);
-
-useHotkey('g', () => {
-  console.log('call-summary')
-  router.push('/call-summary')
-}, { shift: false, command: true })
-
-const displayTime = computed(() => {
-  if (callStore.status === "idle") {
-    return "00:00";
-  }
-  return callStore.formattedDuration;
-});
-
-// Computed properties
-const statusTitle = computed(() => {
-  switch (callStore.status) {
-    case "connecting":
-      return "Connecting...";
-    case "connected":
-      return callStore.isMuted ? "Muted" : "Listening";
-    case "error":
-      return "Connection Error";
-    default:
-      return "Ready";
-  }
-});
-
-const statusSubtitle = computed(() => {
-  switch (callStore.status) {
-    case "connecting":
-      return "Setting up your voice connection";
-    case "connected":
-      return callStore.isMuted
-        ? "Microphone is muted"
-        : "Speak naturally to the assistant";
-    case "error":
-      return "Please try reconnecting";
-    default:
-      return "Voice assistant ready";
-  }
-});
-
-const visualizerIcon = computed(() => {
-  if (callStore.status === "error") return "mdi-microphone-off";
-  if (callStore.isMuted) return "mdi-microphone-off";
-  if (callStore.isRecording) return "mdi-microphone";
-  return "mdi-microphone-outline";
-});
-
-const visualizerIconColor = computed(() => {
-  if (callStore.status === "error") return "error";
-  if (callStore.isMuted) return "warning";
-  if (callStore.isActive) return "primary";
-  return "grey";
-});
-
-// Methods
-const toggleMute = () => {
-  callStore.toggleMute();
-};
-
-const endCall = async () => {
-  isEnding.value = true;
-
-  try {
-    // Stop the call
-    callStore.endCall();
-
-    // Navigate back to landing page
-    await router.push("/");
-  } catch (error) {
-    console.error("Error ending call:", error);
-  } finally {
-    isEnding.value = false;
-  }
-};
-
-const handleBackButton = async () => {
-  if (callStore.isActive) {
-    // Show confirmation dialog if call is active
-    const confirmed = confirm("Are you sure you want to end the call?");
-    if (!confirmed) return;
-  }
-
-  await endCall();
-};
-
-const clearTranscript = () => {
-  callStore.clearMessages();
-};
-
-// Lifecycle
-onMounted(async () => {
-  // If no call is in progress, redirect to landing page
-  if (callStore.status === "idle") {
-    await router.push("/");
-    return;
-  }
-
-  // Note: The actual WebSocket connection will be handled by the GeminiLive component
-  // which watches for status changes and starts when status is 'connecting'
-});
-
-onUnmounted(() => {
-  // Cleanup if needed
-});
-
-// Route guard to prevent direct access
-// This would typically be handled by Vue Router navigation guards
-</script>
-
-<style scoped>
-.dancing-blob-container {
-  width: 400px;
-  height: 300px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 20px;
-  background: transparent;
-  overflow: hidden;
-}
-
-.dancing-blob-container canvas {
-  background: transparent !important;
-}
-
-.connecting-indicator {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-top: 16px;
-}
-
-.connecting-dots {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  justify-content: center;
-}
-
-.connecting-dots .dot {
-  width: 8px;
-  height: 8px;
-  background: #64ffda;
-  border-radius: 50%;
-  animation: dot-pulse 1.4s ease-in-out infinite both;
-}
-
-.connecting-dots .dot:nth-child(1) {
-  animation-delay: -0.32s;
-}
-
-.connecting-dots .dot:nth-child(2) {
-  animation-delay: -0.16s;
-}
-
-@keyframes dot-pulse {
-  0%,
-  80%,
-  100% {
-    transform: scale(0);
-    opacity: 0.5;
-  }
-  40% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-</style>
