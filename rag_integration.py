@@ -15,6 +15,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
 from dotenv import load_dotenv
 import certifi
+import re
 # Setup logging
 logger = logging.getLogger(__name__)
 
@@ -134,18 +135,21 @@ class RAGService:
             if not self.chain:
                 raise ValueError("RAG service not initialized")
             
-            logger.info(f"Processing RAG query: {user_input}")
+            # logger.info(f"Processing RAG query: {user_input}")
             
             # Execute RAG chain
             result = self.chain.invoke({"input": user_input})
             
             # Extract information
-            answer = result.get("answer", "I couldn't process your question.")
+            raw_answer = result.get("answer", "I couldn't process your question.")
             context_docs = result.get("context", [])
+            
+            # Clean the answer to remove any artifacts
+            cleaned_answer = self._clean_answer(raw_answer)
             
             # Prepare response
             response = {
-                "answer": answer,
+                "answer": cleaned_answer,
                 "sources_count": len(context_docs),
                 "sources": [
                     {
@@ -169,6 +173,35 @@ class RAGService:
                 "query": user_input,
                 "error": str(e)
             }
+    
+    def _clean_answer(self, answer: str) -> str:
+        """Clean RAG answer of any artifacts or technical language."""
+        
+        if not answer or not answer.strip():
+            return "I don't have information about that."
+        
+        cleaned = answer.strip()
+        
+        # Remove common technical language
+        cleaned = re.sub(r'according to\s*', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'based on\s*', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'the documents show\s*', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'the information indicates\s*', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'the context shows\s*', '', cleaned, flags=re.IGNORECASE)
+        
+        # Remove any JSON-like structures
+        cleaned = re.sub(r'\{.*?\}', '', cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r'\[.*?\]', '', cleaned, flags=re.DOTALL)
+        
+        # Remove code blocks
+        cleaned = re.sub(r'```.*?```', '', cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r'`.*?`', '', cleaned)
+        
+        # Clean up whitespace
+        cleaned = re.sub(r'\s+', ' ', cleaned)
+        cleaned = cleaned.strip()
+        
+        return cleaned if cleaned else "I don't have information about that."
     
     async def health_check(self) -> Dict[str, Any]:
         """Check RAG service health"""
