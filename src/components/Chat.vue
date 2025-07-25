@@ -4,9 +4,9 @@
     <div class="chat-header">
       <v-icon class="me-2 text-white">mdi-robot</v-icon>
       <span class="font-weight-medium text-white">Voice Assistant</span>
-      <v-spacer></v-spacer>
-      <v-chip 
-        :color="messages.length > 0 ? 'success' : 'grey'" 
+      <v-spacer />
+      <v-chip
+        :color="messages.length > 0 ? 'success' : 'grey'"
         size="small"
         variant="flat"
       >
@@ -15,42 +15,50 @@
     </div>
 
     <!-- Chat Messages Area -->
-    <div class="chat-messages" ref="messagesContainer">
+    <div ref="messagesContainer" class="chat-messages">
       <div v-if="messages.length === 0" class="empty-state">
-        <v-icon size="64" color="grey">mdi-chat-outline</v-icon>
+        <v-icon color="grey" size="64">mdi-chat-outline</v-icon>
         <p class="text-grey mt-4">Start a conversation...</p>
       </div>
-      
+
       <div v-else class="messages-list">
-        <div 
-          v-for="(message, index) in messages" 
-          :key="index"
+        <div
+          v-for="message in messages"
+          :key="message.id"
           class="message-wrapper"
-          :class="message.role"
+          :class="message.type"
         >
           <!-- User Message -->
-          <div v-if="message.role === 'user'" class="message-bubble user-message">
+          <div v-if="message.type === 'user'" class="message-bubble user-message">
+            <div class="message-header">
+              <v-icon class="mr-1" size="16">mdi-microphone</v-icon>
+              <span class="message-label">You said</span>
+            </div>
             <div class="message-content">
               {{ message.content }}
             </div>
             <div class="message-time">
-              {{ formatTime(new Date()) }}
+              {{ formatTime(new Date(message.timestamp)) }}
             </div>
           </div>
-          
+
           <!-- AI Message -->
           <div v-else class="message-bubble ai-message">
             <div class="message-avatar">
-              <v-avatar size="32" color="surface">
+              <v-avatar color="surface" size="32">
                 <v-icon color="white">mdi-robot</v-icon>
               </v-avatar>
             </div>
             <div class="message-content-wrapper">
+              <div class="message-header">
+                <v-icon class="mr-1" size="16">mdi-robot</v-icon>
+                <span class="message-label">AI Assistant</span>
+              </div>
               <div class="message-content">
                 {{ message.content }}
               </div>
               <div class="message-time">
-                {{ formatTime(new Date()) }}
+                {{ formatTime(new Date(message.timestamp)) }}
               </div>
             </div>
           </div>
@@ -60,44 +68,43 @@
   </div>
 </template>
 
-<script setup>
-import { ref, computed, nextTick, watch, onMounted } from 'vue'
-import { useChatStore } from '@/stores/chat'
+<script setup lang="ts">
+  import { computed, nextTick, onMounted, ref, watch } from 'vue'
+  import { useCallStore } from '@/stores/call'
 
-// Store and reactive data
-const chatStore = useChatStore()
-const messagesContainer = ref(null)
-const newMessage = ref('')
+  // Store and reactive data
+  const callStore = useCallStore()
+  const messagesContainer = ref<HTMLDivElement | null>(null)
 
-// Computed properties
-const messages = computed(() => chatStore.messages)
+  // Computed properties
+  const messages = computed(() => callStore.messages)
 
-// Helper function to format time
-const formatTime = (date) => {
-  return date.toLocaleTimeString([], { 
-    hour: '2-digit', 
-    minute: '2-digit' 
+  // Helper function to format time
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
+  // Auto-scroll to bottom when new messages arrive
+  const scrollToBottom = () => {
+    nextTick(() => {
+      if (messagesContainer.value) {
+        messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+      }
+    })
+  }
+
+  // Watch for new messages and auto-scroll
+  watch(messages, () => {
+    scrollToBottom()
+  }, { deep: true })
+
+  // Scroll to bottom on mount
+  onMounted(() => {
+    scrollToBottom()
   })
-}
-
-// Auto-scroll to bottom when new messages arrive
-const scrollToBottom = () => {
-  nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-    }
-  })
-}
-
-// Watch for new messages and auto-scroll
-watch(messages, () => {
-  scrollToBottom()
-}, { deep: true })
-
-// Scroll to bottom on mount
-onMounted(() => {
-  scrollToBottom()
-})
 </script>
 
 <style scoped>
@@ -163,11 +170,20 @@ onMounted(() => {
 }
 
 .user-message {
-  background-color: rgb(var(--v-theme-surface));
+  background-color: rgb(var(--v-theme-primary));
   color: white;
   border-radius: 18px 18px 4px 18px;
   padding: 12px 16px;
   margin-left: auto;
+  border: 1px solid rgba(var(--v-theme-primary), 0.3);
+}
+
+.user-message .message-header {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.user-message .message-label {
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .ai-message {
@@ -186,6 +202,20 @@ onMounted(() => {
   border-radius: 18px 18px 18px 4px;
   padding: 12px 16px;
   max-width: 100%;
+}
+
+.message-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+  opacity: 0.7;
+}
+
+.message-label {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .message-content {
@@ -247,11 +277,11 @@ onMounted(() => {
   .message-bubble {
     max-width: 85%;
   }
-  
+
   .chat-messages {
     padding: 12px;
   }
-  
+
   .messages-list {
     gap: 12px;
   }

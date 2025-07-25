@@ -46,6 +46,7 @@ class ContinuousAudioPlayer {
   constructor() {
     this.audioContext = new AudioContext({
       sampleRate: OUTPUT_AUDIO_CONFIG.sampleRate,
+      latencyHint: 'interactive', // Optimize for low latency
     })
     this.nextChunkTime = this.audioContext.currentTime
   }
@@ -65,7 +66,12 @@ class ContinuousAudioPlayer {
 
   enqueueAudio(audioData: ArrayBuffer) {
     this.queue.push(audioData)
-    console.log(`Enqueued audio chunk, queue length: ${this.queue.length}`)
+    console.log(`🎵 Enqueued audio chunk: ${audioData.byteLength} bytes, queue length: ${this.queue.length}`)
+    
+    // Log potential audio queue buildup issues
+    if (this.queue.length > 10) {
+      console.warn(`⚠️ Audio queue is getting large (${this.queue.length} chunks) - possible lag`)
+    }
   }
 
   clearQueue() {
@@ -83,7 +89,8 @@ class ContinuousAudioPlayer {
         const audioData = this.queue.shift()!
         await this.playChunk(audioData)
       } else {
-        await new Promise((resolve) => setTimeout(resolve, 10))
+        // Use longer intervals when no audio to reduce CPU usage
+        await new Promise((resolve) => setTimeout(resolve, 50))
       }
     }
   }
@@ -95,9 +102,11 @@ class ContinuousAudioPlayer {
       const int16Array = new Int16Array(audioData)
       const float32Array = new Float32Array(int16Array.length)
 
-      // Convert Int16 to Float32
+      // Convert Int16 to Float32 with proper scaling and clipping
       for (let i = 0; i < int16Array.length; i++) {
-        float32Array[i] = int16Array[i] / 32768.0
+        // Normalize and clamp to prevent distortion
+        const normalized = int16Array[i] / 32768.0
+        float32Array[i] = Math.max(-1.0, Math.min(1.0, normalized))
       }
 
       // Create and play audio buffer
@@ -110,17 +119,34 @@ class ContinuousAudioPlayer {
 
       const source = this.audioContext.createBufferSource()
       source.buffer = audioBuffer
-      source.connect(this.audioContext.destination)
+      
+      // Add a low-pass filter to reduce high-frequency noise/buzzing
+      const filter = this.audioContext.createBiquadFilter()
+      filter.type = 'lowpass'
+      filter.frequency.setValueAtTime(8000, this.audioContext.currentTime) // Cut frequencies above 8kHz
+      filter.Q.setValueAtTime(1, this.audioContext.currentTime)
+      
+      // Connect: source -> filter -> destination
+      source.connect(filter)
+      filter.connect(this.audioContext.destination)
 
+      // Ensure proper timing - don't let chunks overlap or have gaps
       if (this.nextChunkTime < this.audioContext.currentTime) {
         this.nextChunkTime = this.audioContext.currentTime
       }
 
-      source.start()
-
-      // Wait for this chunk to finish playing
-      const duration = (float32Array.length / OUTPUT_AUDIO_CONFIG.sampleRate) * 1000
-      await new Promise((resolve) => setTimeout(resolve, duration))
+      // Start audio at precisely the scheduled time
+      source.start(this.nextChunkTime)
+      
+      // Calculate actual duration and update next chunk time
+      const duration = float32Array.length / OUTPUT_AUDIO_CONFIG.sampleRate
+      const timingDiff = this.nextChunkTime - this.audioContext.currentTime
+      
+      console.log(`🔊 Playing audio chunk: ${float32Array.length} samples, duration: ${duration.toFixed(3)}s, timing diff: ${timingDiff.toFixed(3)}s`)
+      
+      this.nextChunkTime += duration
+      
+      // No setTimeout needed - Web Audio API handles timing automatically
     } catch (error) {
       console.error("Error playing audio chunk:", error)
     }
@@ -140,10 +166,10 @@ const initializeAudio = async (): Promise<MediaStream> => {
       },
     })
 
-    // Create AudioContext with low latency settings at 16kHz
+    // Create AudioContext with optimized settings for low latency
     audioContext = new AudioContext({
       sampleRate: INPUT_AUDIO_CONFIG.sampleRate,
-      latencyHint: "interactive",
+      latencyHint: "interactive", // Prioritize low latency over power consumption
     })
 
     analyser = audioContext.createAnalyser()
