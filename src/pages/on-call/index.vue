@@ -11,7 +11,7 @@
 
       <div class="d-flex flex-column align-center justify-center">
         <!-- DANCING BLOB -->
-        <!-- <div class="dancing-blob-container">
+        <div class="dancing-blob-container">
           <TresCanvas :alpha="true">
             <Suspense>
               <DancingBlob
@@ -21,7 +21,7 @@
               />
             </Suspense>
           </TresCanvas>
-        </div> -->
+        </div>
         <h1 class="d-flex align-center justify-center pt-2">
           {{ callStore.status === 'connecting' ? 'Connecting to AI Agent...' : 'AI Agent' }}
         </h1>
@@ -71,18 +71,20 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { useCallStore } from "@/stores/call";
 import { Volume2, Phone } from "lucide-vue-next";
-// import CallTimer from "@/components/CallTimer.vue";
-// import CallTranscript from "@/components/CallTranscript.vue";
+import { TresCanvas } from "@tresjs/core";
+import DancingBlob from "@/components/DancingBlob.vue";
 import GeminiLive from "../../components/GeminiLive.vue";
-
+import Chat from "@/components/Chat.vue";
 import { useHotkey } from '@/utils/Hotkey'
 
 const router = useRouter();
 const callStore = useCallStore();
-const transcriptRef = ref();
 const geminiLiveRef = ref();
 const isEnding = ref(false);
-const isProcessing = ref(false);
+
+// Audio analysis for dancing blob - these will be provided by GeminiLive
+const analyser = ref<AnalyserNode | null>(null);
+const dataArray = ref<Uint8Array | null>(null);
 
 useHotkey('g', () => {
   console.log('call-summary')
@@ -95,54 +97,6 @@ const displayTime = computed(() => {
   }
   return callStore.formattedDuration;
 });
-
-// Computed properties
-const statusTitle = computed(() => {
-  switch (callStore.status) {
-    case "connecting":
-      return "Connecting...";
-    case "connected":
-      return callStore.isMuted ? "Muted" : "Listening";
-    case "error":
-      return "Connection Error";
-    default:
-      return "Ready";
-  }
-});
-
-const statusSubtitle = computed(() => {
-  switch (callStore.status) {
-    case "connecting":
-      return "Setting up your voice connection";
-    case "connected":
-      return callStore.isMuted
-        ? "Microphone is muted"
-        : "Speak naturally to the assistant";
-    case "error":
-      return "Please try reconnecting";
-    default:
-      return "Voice assistant ready";
-  }
-});
-
-const visualizerIcon = computed(() => {
-  if (callStore.status === "error") return "mdi-microphone-off";
-  if (callStore.isMuted) return "mdi-microphone-off";
-  if (callStore.isRecording) return "mdi-microphone";
-  return "mdi-microphone-outline";
-});
-
-const visualizerIconColor = computed(() => {
-  if (callStore.status === "error") return "error";
-  if (callStore.isMuted) return "warning";
-  if (callStore.isActive) return "primary";
-  return "grey";
-});
-
-// Methods
-const toggleMute = () => {
-  callStore.toggleMute();
-};
 
 const endCall = async () => {
   isEnding.value = true;
@@ -160,19 +114,17 @@ const endCall = async () => {
   }
 };
 
-const handleBackButton = async () => {
-  if (callStore.isActive) {
-    // Show confirmation dialog if call is active
-    const confirmed = confirm("Are you sure you want to end the call?");
-    if (!confirmed) return;
-  }
-
-  await endCall();
+// Function to receive audio analysis data from GeminiLive
+const setupBlobAnalyser = (newAnalyser: AnalyserNode, newDataArray: Uint8Array) => {
+  analyser.value = newAnalyser;
+  dataArray.value = newDataArray;
+  console.log("✅ Blob analyser connected from GeminiLive");
 };
 
-const clearTranscript = () => {
-  callStore.clearMessages();
-};
+// Expose function to GeminiLive component
+defineExpose({
+  setupBlobAnalyser
+});
 
 // Lifecycle
 onMounted(async () => {
@@ -182,12 +134,25 @@ onMounted(async () => {
     return;
   }
 
-  // Note: The actual WebSocket connection will be handled by the GeminiLive component
-  // which watches for status changes and starts when status is 'connecting'
+  // Set up parent-child communication with GeminiLive
+  if (geminiLiveRef.value?.setParentComponent) {
+    geminiLiveRef.value.setParentComponent({
+      setupBlobAnalyser
+    });
+  }
+});
+
+// Watch for GeminiLive component ref to become available
+watch(geminiLiveRef, (newRef) => {
+  if (newRef?.setParentComponent) {
+    newRef.setParentComponent({
+      setupBlobAnalyser
+    });
+  }
 });
 
 onUnmounted(() => {
-  // Cleanup if needed
+  // No cleanup needed - GeminiLive handles its own AudioContext
 });
 
 // Route guard to prevent direct access
@@ -253,6 +218,7 @@ onUnmounted(() => {
   }
 }
 </style>
+
 
 <!-- <script setup lang="ts">
 import { Volume2, Phone } from "lucide-vue-next";
@@ -500,4 +466,4 @@ onBeforeUnmount(() => {
     callStore.endCall();
   }
 });
-</script> -->
+</script>

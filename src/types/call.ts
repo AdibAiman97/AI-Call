@@ -11,6 +11,7 @@ export interface CallState {
   status: CallStatus
   isRecording: boolean
   isMuted: boolean
+  isPlayingAudio: boolean
   startTime: number | null
   duration: number
   messages: ConversationMessage[]
