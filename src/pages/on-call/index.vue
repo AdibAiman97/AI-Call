@@ -323,12 +323,19 @@ import { Volume2, Phone } from "lucide-vue-next";
 // import CallTranscript from "@/components/CallTranscript.vue";
 import GeminiLive from "../../components/GeminiLive.vue";
 
+import { useHotkey } from '@/utils/Hotkey'
+
 const router = useRouter();
 const callStore = useCallStore();
 const transcriptRef = ref();
 const geminiLiveRef = ref();
 const isEnding = ref(false);
 const isProcessing = ref(false);
+
+useHotkey('g', () => {
+  console.log('call-summary')
+  router.push('/call-summary')
+}, { shift: false, command: true })
 
 const displayTime = computed(() => {
   if (callStore.status === "idle") {
