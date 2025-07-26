@@ -46,7 +46,10 @@ from database.models.call_session import CallSession
 from database.models.transcript import Transcript
 
 # Import AI Services
-from ai_services.call_suggestion_admin import get_suggestion_from_agent
+from ai_services.call_suggestion_admin import (
+    get_suggestion_from_agent,
+    analyze_call_and_generate_suggestions,
+)
 from ai_services.call_suggestion_customer import generate_caller_suggestions
 from ai_services.call_summarized_context import summarize_text
 from ai_services.sentiment_tool import analyze_sentiment_from_transcript
@@ -261,7 +264,58 @@ async def process_call_session_ai(call_session_id: int):
             )
             print(f"❌ Error analyzing sentiment: {e}")
 
-        # 4. Update call session with all collected data using the service
+        # 4. Generate admin suggestions and analysis
+        admin_suggestions = None
+        try:
+            logger.info(
+                f"🎯 Generating admin suggestions for session {call_session_id}"
+            )
+            print(f"🎯 Generating admin suggestions for session {call_session_id}")
+            admin_analysis_result = analyze_call_and_generate_suggestions(
+                call_session_id
+            )
+
+            if admin_analysis_result.get("success"):
+                # Extract the analysis data and convert to string for database storage
+                analysis_data = admin_analysis_result.get("analysis", {})
+
+                # Format the analysis as a readable string
+                admin_suggestions = f"""CALL ANALYSIS SUMMARY:
+
+Call Summary: {analysis_data.get('call_summary', 'N/A')}
+
+Key Topics: {', '.join(analysis_data.get('key_topics', []))}
+
+Customer Sentiment: {analysis_data.get('customer_sentiment', 'Unknown')}
+
+Customer Needs: {', '.join(analysis_data.get('customer_needs', []))}
+
+Admin Action Items:
+{chr(10).join([f"• {item}" for item in analysis_data.get('admin_suggestions', [])])}
+
+Priority Level: {analysis_data.get('priority_level', 'Medium')}
+Follow-up Required: {analysis_data.get('follow_up_required', 'Unknown')}
+Next Steps: {analysis_data.get('next_steps', 'Review call details')}"""
+
+                # Show preview (safely)
+                preview = (
+                    admin_suggestions[:100] + "..."
+                    if len(admin_suggestions) > 100
+                    else admin_suggestions
+                )
+                print(f"✅ Admin analysis generated: {preview}")
+            else:
+                logger.warning(
+                    f"Admin analysis failed for session {call_session_id}: {admin_analysis_result.get('error')}"
+                )
+                print(f"⚠️ Admin analysis failed: {admin_analysis_result.get('error')}")
+        except Exception as e:
+            logger.error(
+                f"❌ Error generating admin suggestions for session {call_session_id}: {e}"
+            )
+            print(f"❌ Error generating admin suggestions: {e}")
+
+        # 5. Update call session with all collected data using the service
         try:
             logger.info(f"📊 Updating call session {call_session_id} via service")
             print(f"📊 Updating call session {call_session_id} via service")
@@ -315,10 +369,11 @@ async def process_call_session_ai(call_session_id: int):
                     print(f"   ⚠️ Could not extract key words: {kw_error}")
 
                 update_data = CallSessionUpdate(
-                    end_time=end_time.isoformat(),
+                    end_time=end_time,
                     duration_secs=duration_secs,
                     summarized_content=summary,
                     customer_suggestions=customer_suggestions,
+                    admin_suggestions=admin_suggestions,
                     positive=positive_count,
                     neutral=neutral_count,
                     negative=negative_count,
@@ -381,9 +436,9 @@ async def process_call_session_ai(call_session_id: int):
 # =============================================================================
 
 # Configuration
-GEMINI_HOST = 'generativelanguage.googleapis.com'
+GEMINI_HOST = "generativelanguage.googleapis.com"
 # GEMINI_MODEL = 'models/gemini-2.0-flash-live-001'
-GEMINI_MODEL = 'models/gemini-2.5-flash-preview-native-audio-dialog'
+GEMINI_MODEL = "models/gemini-2.5-flash-preview-native-audio-dialog"
 # GEMINI_MODEL = 'models/gemini-live-2.5-flash-preview'
 
 # VAD Configuration - Set to False if having voice detection issues
@@ -503,22 +558,37 @@ def decode_audio_output(input_msg: dict) -> bytes:
 
 def extract_text_response(input_msg: dict) -> str:
     """Extract text response from Gemini message."""
-    content_input = input_msg.get('serverContent', {})
-    content = content_input.get('modelTurn', {})
-    for part in content.get('parts', []):
-        if 'text' in part:
-            raw_text = part['text']
-            
+    content_input = input_msg.get("serverContent", {})
+    content = content_input.get("modelTurn", {})
+    for part in content.get("parts", []):
+        if "text" in part:
+            raw_text = part["text"]
+
             # More aggressive filtering of tool artifacts
-            if raw_text and any(pattern in raw_text.lower() for pattern in [
-                'tool_response', 'function_responses', 'string_value', 
-                '"id":', '"name":', '"response":', 'tool_outputs',
-                '```tool_outputs', '{"answer"', '"answer":', 'tool_',
-                'function_', '```json', '"result":'
-            ]):
-                print(f"🗑️ Filtering out text response containing tool artifacts: '{raw_text[:50]}...'")
+            if raw_text and any(
+                pattern in raw_text.lower()
+                for pattern in [
+                    "tool_response",
+                    "function_responses",
+                    "string_value",
+                    '"id":',
+                    '"name":',
+                    '"response":',
+                    "tool_outputs",
+                    "```tool_outputs",
+                    '{"answer"',
+                    '"answer":',
+                    "tool_",
+                    "function_",
+                    "```json",
+                    '"result":',
+                ]
+            ):
+                print(
+                    f"🗑️ Filtering out text response containing tool artifacts: '{raw_text[:50]}...'"
+                )
                 return ""
-            
+
             # Return raw text for further cleaning by _clean_debug_artifacts
             return raw_text if raw_text else ""
     return ""
@@ -563,11 +633,15 @@ class GeminiLiveConnection:
             2.0  # Seconds to wait before sending incomplete transcript
         )
         self.last_rag_result = ""  # Store last RAG result for verification
-        self.last_rag_query = ""   # Store last RAG query for verification
-        self.call_session_id = call_session_id  # Store call session ID for database operations
+        self.last_rag_query = ""  # Store last RAG query for verification
+        self.call_session_id = (
+            call_session_id  # Store call session ID for database operations
+        )
         self._processing_response = False  # Flag to prevent duplicate processing
-        self._initial_greeting_sent = False  # Flag to prevent duplicate initial greeting
-        
+        self._initial_greeting_sent = (
+            False  # Flag to prevent duplicate initial greeting
+        )
+
     async def connect_to_gemini(self):
         """Connect to Gemini Live API."""
         try:
@@ -580,7 +654,7 @@ class GeminiLiveConnection:
 
             # Define RAG function for Gemini to call
             rag_function_declaration = {
-                "name": "search_knowledge_base", 
+                "name": "search_knowledge_base",
                 "description": """
                 MANDATORY FUNCTION - MUST BE CALLED FOR EVERY PROPERTY QUESTION
                 
@@ -604,7 +678,7 @@ class GeminiLiveConnection:
                     "properties": {
                         "query": {
                             "type": "string",
-                            "description": "The user's complete question or any property-related terms they mentioned. Include context like 'projects at Gamuda Cove' or 'available properties'."
+                            "description": "The user's complete question or any property-related terms they mentioned. Include context like 'projects at Gamuda Cove' or 'available properties'.",
                         }
                     },
                     "required": ["query"],
@@ -618,7 +692,9 @@ class GeminiLiveConnection:
                     "generation_config": {
                         "response_modalities": ["AUDIO"],
                         "speech_config": {
-                            "voice_config": {"prebuilt_voice_config": {"voice_name": "Kore"}}
+                            "voice_config": {
+                                "prebuilt_voice_config": {"voice_name": "Kore"}
+                            }
                         },
                         "max_output_tokens": 500,
                         "temperature": 0.7,
@@ -646,14 +722,15 @@ class GeminiLiveConnection:
                 print(f"🎙️ VAD enabled with HIGH sensitivity settings")
             else:
                 print(f"🎙️ VAD disabled - using continuous audio streaming")
-            
+
             # 2. Property type preference (Semi-detached, Terrace, Bungalow, Apartments)
             # 3. Purpose of purchase (investment, own stay, family)
-            
+
             # Add system instruction and tools
             setup_message["setup"]["system_instruction"] = {
-                "parts": [{
-                    "text": """
+                "parts": [
+                    {
+                        "text": """
                             You are Gina, a friendly and professional sales consultant for Gamuda Cove sales gallery located in Bandar Gamuda Cove, Kuala Langat, Selangor.
 
                             VOICE CONVERSATION GUIDELINES:
@@ -744,15 +821,17 @@ class GeminiLiveConnection:
 
             asyncio.create_task(self._listen_to_gemini())
             print(f"👂 Listening for Gemini responses")
-            
+
             # Send initial greeting to trigger Gina's response (only once)
             if not self._initial_greeting_sent:
                 # Send a simple prompt to trigger AI greeting without user input
-                initial_prompt = "Please greet the customer as Gina from Gamuda Cove sales gallery."
+                initial_prompt = (
+                    "Please greet the customer as Gina from Gamuda Cove sales gallery."
+                )
                 await self.send_text_to_gemini(initial_prompt)
                 print(f"👋 Sent greeting prompt to trigger Gina's welcome message")
                 self._initial_greeting_sent = True
-            
+
             # Wait a moment for any immediate responses
             await asyncio.sleep(1)
             print(f"✅ Setup complete, ready for interactions")
@@ -907,25 +986,32 @@ class GeminiLiveConnection:
                             if text_parts and not self._processing_response:
                                 self._processing_response = True
                                 try:
-                                    text_content = text_parts[0]['text']
-                                    
+                                    text_content = text_parts[0]["text"]
+
                                     # Clean the text content to remove tool artifacts
-                                    cleaned_content = self._clean_debug_artifacts(text_content)
-                                    
+                                    cleaned_content = self._clean_debug_artifacts(
+                                        text_content
+                                    )
+
                                     if cleaned_content and cleaned_content.strip():
-                                        text_preview = cleaned_content[:60] + ('...' if len(cleaned_content) > 60 else '')
-                                        print(f"📨 Gemini text (cleaned): \"{text_preview}\"")
-                                        
+                                        text_preview = cleaned_content[:60] + (
+                                            "..." if len(cleaned_content) > 60 else ""
+                                        )
+                                        print(
+                                            f'📨 Gemini text (cleaned): "{text_preview}"'
+                                        )
+
                                         # Send cleaned text to frontend
-                                        await self.client_ws.send_json({
-                                            "type": "text",
-                                            "content": cleaned_content
-                                        })
+                                        await self.client_ws.send_json(
+                                            {"type": "text", "content": cleaned_content}
+                                        )
                                     else:
-                                        print(f"🗑️ Filtered out text response containing only tool artifacts")
+                                        print(
+                                            f"🗑️ Filtered out text response containing only tool artifacts"
+                                        )
                                 finally:
                                     self._processing_response = False
-                            
+
                             if audio_parts:
                                 audio_size = len(
                                     audio_parts[0]["inlineData"].get("data", "")
@@ -994,7 +1080,19 @@ class GeminiLiveConnection:
                         )
 
                         # Debug: Check if this chunk contains key words
-                        key_words = ['mori', 'pines', 'gamuda', 'cove', 'property', 'project', 'development', 'township', 'estate', 'estate', 'budget']
+                        key_words = [
+                            "mori",
+                            "pines",
+                            "gamuda",
+                            "cove",
+                            "property",
+                            "project",
+                            "development",
+                            "township",
+                            "estate",
+                            "estate",
+                            "budget",
+                        ]
                         for word in key_words:
                             if word in text_content.lower():
                                 print(
@@ -1124,24 +1222,33 @@ class GeminiLiveConnection:
 
                     if text_content:
                         # No filtering needed - process all content
-                        
+
                         # Accumulate AI transcript chunks
                         self.ai_transcript_buffer += text_content
                         # print(f"🤖 AI transcript chunk: \"{text_content}\" (buffer: \"{self.ai_transcript_buffer}\")")
 
                         # Only send transcript when we detect definitive end of sentence
                         # Remove timing-based sending to avoid premature messages
-                        if (text_content.endswith('.') or text_content.endswith('?') or 
-                            text_content.endswith('!') or text_content.endswith('\n')):
-                            
-                            if self.ai_transcript_buffer.strip() and not self._processing_response:
+                        if (
+                            text_content.endswith(".")
+                            or text_content.endswith("?")
+                            or text_content.endswith("!")
+                            or text_content.endswith("\n")
+                        ):
+
+                            if (
+                                self.ai_transcript_buffer.strip()
+                                and not self._processing_response
+                            ):
                                 self._processing_response = True
                                 try:
                                     # Get the complete transcript
                                     transcript = self.ai_transcript_buffer.strip()
-                                    
-                                    print(f"🤖 Sending complete AI transcript: \"{transcript}\"")
-                                    
+
+                                    print(
+                                        f'🤖 Sending complete AI transcript: "{transcript}"'
+                                    )
+
                                     # Save AI transcript to database
                                     try:
                                         db = next(get_db())
@@ -1149,25 +1256,26 @@ class GeminiLiveConnection:
                                             db=db,
                                             session_id=self.call_session_id,
                                             message=transcript,
-                                            message_by="AI"
+                                            message_by="AI",
                                         )
                                         print(f"💾 Saved AI transcript to database")
                                     except Exception as e:
-                                        print(f"❌ Error saving AI transcript to database: {e}")
+                                        print(
+                                            f"❌ Error saving AI transcript to database: {e}"
+                                        )
                                     finally:
                                         if db:
                                             db.close()
-                                    
+
                                     # Send to frontend
-                                    await self.client_ws.send_json({
-                                        "type": "text",
-                                        "content": transcript
-                                    })
-                                    
+                                    await self.client_ws.send_json(
+                                        {"type": "text", "content": transcript}
+                                    )
+
                                     self.ai_transcript_buffer = ""  # Clear buffer
                                 finally:
                                     self._processing_response = False
-                        
+
                         self.last_ai_transcript_time = time.time()
 
             # Handle audio chunks (for playback)
@@ -1390,18 +1498,25 @@ class GeminiLiveConnection:
                             )
 
                     rag_result = await process_rag_query(query)
-                    
+
                     # Get clean answer text directly
-                    answer_text = rag_result.get('answer', '').strip()
-                    
-                    if answer_text and answer_text != "I couldn't process your question.":
+                    answer_text = rag_result.get("answer", "").strip()
+
+                    if (
+                        answer_text
+                        and answer_text != "I couldn't process your question."
+                    ):
                         # Simple cleaning - just the basic text
-                        result_text = answer_text.replace("According to", "").replace("Based on", "").strip()
+                        result_text = (
+                            answer_text.replace("According to", "")
+                            .replace("Based on", "")
+                            .strip()
+                        )
                         print(f"📚 RAG result: '{result_text[:100]}...'")
                     else:
                         result_text = "I don't have specific information about that."
                         print(f"📚 No RAG answer found")
-                    
+
                     # Send ONLY the clean text as function response with explicit instruction
                     function_response = {
                         "tool_response": {
@@ -1416,14 +1531,14 @@ class GeminiLiveConnection:
                             ]
                         }
                     }
-                    
+
                     print(f"📤 Sending clean RAG result to Gemini")
                     await self.gemini_ws.send(json.dumps(function_response))
-                    
+
                     self.last_rag_result = result_text
                     self.last_rag_query = query
                     print(f"✅ Function response sent")
-                    
+
                 else:
                     print(f"❓ Unknown function: {function_name}")
 
@@ -1449,33 +1564,33 @@ class GeminiLiveConnection:
                             "channels": OUTPUT_AUDIO_CONFIG.channels,
                         },
                     }
-                })
-            
+                )
+
             # Handle text responses (avoid duplicate processing)
             if text_response := extract_text_response(msg_data):
                 if not self._processing_response:
                     self._processing_response = True
                     try:
                         # Send response directly - no complex cleaning needed
-                        await self.client_ws.send_json({
-                            "type": "text",
-                            "content": text_response
-                        })
+                        await self.client_ws.send_json(
+                            {"type": "text", "content": text_response}
+                        )
                     finally:
                         self._processing_response = False
-            
+
             # Handle turn completion
             if "turnComplete" in msg_data.get("serverContent", {}):
                 # Flush any remaining transcript buffers
                 if self.ai_transcript_buffer.strip():
                     # Clean final transcript before flushing
-                    cleaned_final = self._clean_debug_artifacts(self.ai_transcript_buffer.strip())
+                    cleaned_final = self._clean_debug_artifacts(
+                        self.ai_transcript_buffer.strip()
+                    )
                     if cleaned_final:
-                        print(f"🤖 Flushing final AI transcript: \"{cleaned_final}\"")
-                        await self.client_ws.send_json({
-                            "type": "text",
-                            "content": cleaned_final
-                        })
+                        print(f'🤖 Flushing final AI transcript: "{cleaned_final}"')
+                        await self.client_ws.send_json(
+                            {"type": "text", "content": cleaned_final}
+                        )
                     else:
                         print(f"🗑️ Discarded final AI transcript after cleaning")
                     self.ai_transcript_buffer = ""
@@ -1559,97 +1674,128 @@ class GeminiLiveConnection:
     def _clean_debug_artifacts(self, text: str) -> str:
         """Remove debug artifacts from Gemini responses."""
         import re
-        
+
         if not text or not text.strip():
             return ""
-        
+
         original_text = text
         cleaned = text.strip()
-        
+
         # Early rejection of responses that are mostly tool artifacts
-        if any(pattern in cleaned.lower() for pattern in [
-            'tool_outputs', 'function_responses', 'tool_response', '```tool_outputs',
-            '"answer":', '{"answer"', '"id":', '"name":', '"response":', "{'answer':",
-            'tool_', '```json', '{"', "{'", "answer':"
-        ]):
+        if any(
+            pattern in cleaned.lower()
+            for pattern in [
+                "tool_outputs",
+                "function_responses",
+                "tool_response",
+                "```tool_outputs",
+                '"answer":',
+                '{"answer"',
+                '"id":',
+                '"name":',
+                '"response":',
+                "{'answer':",
+                "tool_",
+                "```json",
+                '{"',
+                "{'",
+                "answer':",
+            ]
+        ):
             # Check if there's any meaningful content after removing artifacts
-            temp_cleaned = re.sub(r'```[\s\S]*?```', '', cleaned, flags=re.DOTALL)
-            temp_cleaned = re.sub(r'\{.*?\}', '', temp_cleaned, flags=re.DOTALL)
+            temp_cleaned = re.sub(r"```[\s\S]*?```", "", cleaned, flags=re.DOTALL)
+            temp_cleaned = re.sub(r"\{.*?\}", "", temp_cleaned, flags=re.DOTALL)
             temp_cleaned = temp_cleaned.strip()
-            
+
             # If almost nothing remains, reject the entire response
             if len(temp_cleaned) < 10:
-                print(f"🗑️ Rejecting response that's mostly tool artifacts: '{cleaned[:50]}...'")
+                print(
+                    f"🗑️ Rejecting response that's mostly tool artifacts: '{cleaned[:50]}...'"
+                )
                 return ""
-        
+
         # Remove all code blocks (including tool_outputs)
-        cleaned = re.sub(r'```[\s\S]*?```', '', cleaned, flags=re.DOTALL)
-        
+        cleaned = re.sub(r"```[\s\S]*?```", "", cleaned, flags=re.DOTALL)
+
         # Remove tool_outputs patterns more aggressively
-        cleaned = re.sub(r'tool_outputs[\s\S]*', '', cleaned, flags=re.IGNORECASE | re.DOTALL)
-        cleaned = re.sub(r'tool[\s_]outputs[\s\S]*', '', cleaned, flags=re.IGNORECASE | re.DOTALL)
-        
+        cleaned = re.sub(
+            r"tool_outputs[\s\S]*", "", cleaned, flags=re.IGNORECASE | re.DOTALL
+        )
+        cleaned = re.sub(
+            r"tool[\s_]outputs[\s\S]*", "", cleaned, flags=re.IGNORECASE | re.DOTALL
+        )
+
         # Remove tool_response and function_responses structures
-        cleaned = re.sub(r'tool_response[\s\S]*', '', cleaned, flags=re.IGNORECASE | re.DOTALL)
-        cleaned = re.sub(r'function_responses[\s\S]*', '', cleaned, flags=re.IGNORECASE | re.DOTALL)
-        
+        cleaned = re.sub(
+            r"tool_response[\s\S]*", "", cleaned, flags=re.IGNORECASE | re.DOTALL
+        )
+        cleaned = re.sub(
+            r"function_responses[\s\S]*", "", cleaned, flags=re.IGNORECASE | re.DOTALL
+        )
+
         # Remove JSON structures completely - be more aggressive
-        cleaned = re.sub(r'\{[\s\S]*?\}', '', cleaned, flags=re.DOTALL)
-        cleaned = re.sub(r'\[[\s\S]*?\]', '', cleaned, flags=re.DOTALL)
-        
+        cleaned = re.sub(r"\{[\s\S]*?\}", "", cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r"\[[\s\S]*?\]", "", cleaned, flags=re.DOTALL)
+
         # Remove any remaining backticks and quotes
-        cleaned = re.sub(r'`+', '', cleaned)
-        cleaned = re.sub(r'"+', '', cleaned)
-        cleaned = re.sub(r"'+", '', cleaned)
-        
+        cleaned = re.sub(r"`+", "", cleaned)
+        cleaned = re.sub(r'"+', "", cleaned)
+        cleaned = re.sub(r"'+", "", cleaned)
+
         # Remove technical terms and patterns
         technical_patterns = [
-            r'hits\s*:.*',
-            r'string_value\s*:.*',
-            r'result\s*:.*',
-            r'according to.*',
-            r'based on.*',
-            r'the documents? show.*',
-            r'the information indicates.*',
-            r'id\s*:.*',
-            r'name\s*:.*',
-            r'response\s*:.*'
+            r"hits\s*:.*",
+            r"string_value\s*:.*",
+            r"result\s*:.*",
+            r"according to.*",
+            r"based on.*",
+            r"the documents? show.*",
+            r"the information indicates.*",
+            r"id\s*:.*",
+            r"name\s*:.*",
+            r"response\s*:.*",
         ]
-        
+
         for pattern in technical_patterns:
-            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE | re.DOTALL)
-        
+            cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE | re.DOTALL)
+
         # Clean up lines that look like JSON keys
-        lines = cleaned.split('\n')
+        lines = cleaned.split("\n")
         clean_lines = []
         for line in lines:
             line = line.strip()
             # Skip lines that look like JSON keys or are too short
-            if (len(line) > 3 and 
-                not re.match(r'^["\']?[\w_]+["\']?\s*:', line) and
-                not re.match(r'^[\{\[\}\]]+$', line)):
+            if (
+                len(line) > 3
+                and not re.match(r'^["\']?[\w_]+["\']?\s*:', line)
+                and not re.match(r"^[\{\[\}\]]+$", line)
+            ):
                 clean_lines.append(line)
-        
-        cleaned = ' '.join(clean_lines)
-        
+
+        cleaned = " ".join(clean_lines)
+
         # Final whitespace cleanup
-        cleaned = re.sub(r'\s+', ' ', cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned)
         cleaned = cleaned.strip()
-        
+
         # Remove remaining artifacts
-        cleaned = re.sub(r'^["\'\{\[\}\]]+|["\'\{\[\}\]]+$', '', cleaned)
+        cleaned = re.sub(r'^["\'\{\[\}\]]+|["\'\{\[\}\]]+$', "", cleaned)
         cleaned = cleaned.strip()
-        
+
         # Log cleaning if significant changes were made
         if cleaned != original_text and len(cleaned) > 0:
             print(f"🧹 Cleaned response:")
-            print(f"   Original: '{original_text[:80]}{'...' if len(original_text) > 80 else ''}' ({len(original_text)} chars)")
-            print(f"   Cleaned:  '{cleaned[:80]}{'...' if len(cleaned) > 80 else ''}' ({len(cleaned)} chars)")
+            print(
+                f"   Original: '{original_text[:80]}{'...' if len(original_text) > 80 else ''}' ({len(original_text)} chars)"
+            )
+            print(
+                f"   Cleaned:  '{cleaned[:80]}{'...' if len(cleaned) > 80 else ''}' ({len(cleaned)} chars)"
+            )
         elif len(cleaned) == 0 and len(original_text) > 0:
             print(f"🗑️ Completely filtered out response: '{original_text[:50]}...'")
-        
+
         return cleaned if cleaned and len(cleaned) > 3 else ""
-    
+
     async def _generate_user_transcript(self):
         """Generate transcript from accumulated user audio buffer."""
         if not self.user_audio_buffer:
@@ -1753,6 +1899,34 @@ class SentimentAnalysisRequest(BaseModel):
 
 class SessionConversationRequest(BaseModel):
     session_id: int
+
+
+class AdminAnalysisRequest(BaseModel):
+    session_id: int
+
+
+@app.post("/api/ai/admin-analysis")
+async def admin_analysis_endpoint(request: AdminAnalysisRequest):
+    """Generate comprehensive admin analysis and suggestions for a call session."""
+    try:
+        analysis_result = analyze_call_and_generate_suggestions(request.session_id)
+
+        if analysis_result.get("success"):
+            return {
+                "success": True,
+                "session_id": request.session_id,
+                "analysis": analysis_result.get("analysis"),
+                "message": "Analysis completed and saved to database",
+            }
+        else:
+            raise HTTPException(
+                status_code=404, detail=analysis_result.get("error", "Analysis failed")
+            )
+    except Exception as e:
+        logger.error(f"Admin analysis error: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error generating admin analysis: {str(e)}"
+        )
 
 
 @app.post("/api/ai/admin-suggestion")
@@ -2009,6 +2183,7 @@ async def ai_services_health():
                 "/api/ai/session-conversation",
                 "/api/ai/process-session",
                 "/api/ai/process-session-manual/{session_id}",
+                "/api/ai/health",
                 "/api/call-session/{session_id}/status",
             ],
         }
@@ -2667,6 +2842,7 @@ async def test_gemini_live_endpoint(request_data: dict):
     except Exception as e:
         print(f"❌ Gemini Live test failed: {e}")
         return {"status": "error", "error": str(e)}
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -6,11 +6,12 @@ from database.connection import SessionLocal
 from database.models.transcript import Transcript
 from sqlalchemy.exc import SQLAlchemyError
 import json
+import re
 
 # LLM Configuration
 llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
 
-# Template for sentiment analysis
+# Template for sentiment analysis with more explicit JSON formatting requirements
 sentiment_template = ChatPromptTemplate.from_messages(
     [
         (
@@ -18,12 +19,42 @@ sentiment_template = ChatPromptTemplate.from_messages(
             """You are an expert in sentiment analysis. Your task is to analyze the sentiment of a given text and classify it as 'Positive', 'Negative', or 'Neutral'.
             Provide a confidence score between 0 and 1 for your classification.
             Also, provide a brief explanation for your sentiment classification.
-            Return the result in JSON format with the following keys: 'sentiment', 'confidence', and 'explanation'.
+            
+            IMPORTANT: You must return ONLY a valid JSON object with the following structure:
+            {{
+                "sentiment": "Positive" | "Negative" | "Neutral",
+                "confidence": 0.95,
+                "explanation": "Brief explanation here"
+            }}
+            
+            Do not include any other text before or after the JSON. Only return the JSON object.
             """,
         ),
         ("user", "Analyze the sentiment of this text: {text}"),
     ]
 )
+
+
+def extract_json_from_response(response: str) -> dict:
+    """Extract JSON from LLM response, handling various formatting issues."""
+    try:
+        # First try direct parsing
+        return json.loads(response.strip())
+    except json.JSONDecodeError:
+        try:
+            # Try to find JSON block in the response
+            json_match = re.search(r"\{.*\}", response, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+        except json.JSONDecodeError:
+            pass
+
+        # If all else fails, create a default response
+        return {
+            "sentiment": "Neutral",
+            "confidence": 0.5,
+            "explanation": "Could not parse sentiment analysis response",
+        }
 
 
 @tool
@@ -48,14 +79,31 @@ def analyze_sentiment_from_transcript(transcript_id: int) -> str:
                 }
             )
 
+        # Check if transcript message is empty or too short
+        if not transcript.message or len(transcript.message.strip()) < 3:
+            return json.dumps(
+                {
+                    "success": True,
+                    "transcript_id": transcript_id,
+                    "sentiment_analysis": {
+                        "sentiment": "Neutral",
+                        "confidence": 0.5,
+                        "explanation": "Text too short for meaningful sentiment analysis",
+                    },
+                }
+            )
+
         chain = sentiment_template | llm | StrOutputParser()
         result = chain.invoke({"text": transcript.message})
+
+        # Use the robust JSON extraction function
+        sentiment_data = extract_json_from_response(result)
 
         return json.dumps(
             {
                 "success": True,
                 "transcript_id": transcript_id,
-                "sentiment_analysis": json.loads(result),
+                "sentiment_analysis": sentiment_data,
             }
         )
 
