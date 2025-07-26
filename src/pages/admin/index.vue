@@ -37,18 +37,48 @@
 
     <v-tabs-window v-model="tab" class="">
       <v-tabs-window-item value="sum">
-        <div class="admin-layout">
-          <!-- Row 1: Summarized Content & Customer -->
-          <div class="row-1">
-            <!-- Summarized Content -->
-            <v-card class="rounded-lg elevation-2 d-flex flex-column">
-              <v-card-title class="text-h6 text-foreground flex-shrink-0">
+        <div class="admin-dashboard">
+          <!-- Left Column -->
+          <div class="left-column">
+            <!-- Keywords Card -->
+            <v-card class="rounded-lg elevation-2 mb-5">
+              <v-card-title class="text-h6 text-capitalize">
+                Key Words
+              </v-card-title>
+              <v-card-text class="px-4">
+                <v-chip-group v-if="!loading && keywordsList.length > 0">
+                  <v-chip
+                    v-for="keyword in keywordsList"
+                    :key="keyword"
+                    :class="[
+                      'ma-0 mr-3 cursor-pointer',
+                      isKeywordSelected(keyword) ? 'bg-primary' : 'bg-info',
+                    ]"
+                    text-color="white"
+                    @click="selectKeyword(keyword)"
+                  >
+                    {{ keyword }}
+                  </v-chip>
+                </v-chip-group>
+                <div v-else-if="loading" class="text-center pa-4">
+                  <v-progress-circular
+                    indeterminate
+                    size="24"
+                  ></v-progress-circular>
+                  <p class="mt-2">Loading keywords...</p>
+                </div>
+                <div v-else class="text-center pa-4 text-grey">
+                  No keywords available
+                </div>
+              </v-card-text>
+            </v-card>
+
+            <!-- Summarized Content Card -->
+            <v-card class="rounded-lg elevation-2 mb-5">
+              <v-card-title class="text-h6 text-foreground">
                 Summarized Context
               </v-card-title>
-              <v-card-text
-                class="d-flex flex-column ga-2 text-body-1 text-secForeground flex-grow-1 overflow-y-auto"
-                style="min-height: 200px;"
-              >
+              <v-card-text class="d-flex flex-column ga-2 text-body-1 text-secForeground">
                 <div v-if="!loading && summaryList.length > 0">
                   <div v-for="item in summaryList" class="d-flex ga-2 mb-2">
                     <p>•</p>
@@ -66,23 +96,45 @@
                   No summary available
                 </div>
               </v-card-text>
-              <!-- <v-card-actions class="pa-2 flex-shrink-0">
-                <v-btn
-                  text
-                  color="primary"
-                  class="text-capitalize px-2"
-                  @click="viewFullTranscript"
-                  >View Full Transcript >
-                </v-btn>
-              </v-card-actions> -->
             </v-card>
 
-            <!-- Customer Card -->
-            <v-card class="rounded-lg elevation-2 d-flex flex-column">
-              <v-card-title class="text-h6 flex-shrink-0"
-                >Customer Details</v-card-title
-              >
-              <v-card-text class="flex-grow-1 d-flex flex-column justify-center pb-0">
+            <!-- Admin Suggestions Card -->
+            <v-card class="rounded-lg elevation-2">
+              <v-card-title class="text-h6 text-foreground">
+                Admin Suggestions
+              </v-card-title>
+              <v-card-text class="d-flex flex-column ga-2 text-body-1 text-secForeground">
+                <div v-if="!loading && agentNextSteps.length > 0">
+                  <div
+                    v-for="item in agentNextSteps"
+                    class="d-flex ga-2 mb-2"
+                  >
+                    <p>•</p>
+                    <p>{{ item }}</p>
+                  </div>
+                </div>
+                <div v-else-if="loading" class="text-center pa-4">
+                  <v-progress-circular
+                    indeterminate
+                    size="24"
+                  ></v-progress-circular>
+                  <p class="mt-2">Loading suggestions...</p>
+                </div>
+                <div v-else class="text-center pa-4 text-grey">
+                  No suggestions available
+                </div>
+              </v-card-text>
+            </v-card>
+          </div>
+
+          <!-- Right Column -->
+          <div class="right-column">
+            <!-- Customer Details Card -->
+            <v-card class="rounded-lg elevation-2 mb-5">
+              <v-card-title class="text-h6">
+                Customer Details
+              </v-card-title>
+              <v-card-text class="d-flex flex-column justify-center pb-0 my-3">
                 <div
                   class="d-flex align-center"
                   v-if="!loading && customerData"
@@ -108,18 +160,6 @@
                       <v-icon small class="mr-2">mdi-phone</v-icon>
                       {{ customerData.phone_number }}
                     </p>
-                    <!-- <p class="mb-1 text-foreground">
-                      <v-icon small class="mr-2">mdi-cash</v-icon>
-                      Budget: RM{{ customerData.budget?.toLocaleString() }}
-                    </p> -->
-                    <!-- <p class="mb-1 text-foreground">
-                      <v-icon small class="mr-2">mdi-map-marker</v-icon>
-                      {{ customerData.preferred_location }}
-                    </p>
-                    <p class="mb-1 text-foreground text-caption">
-                      <v-icon small class="mr-2">mdi-target</v-icon>
-                      {{ customerData.purchase_purpose }}
-                    </p> -->
                   </div>
                 </div>
                 <div v-else-if="loading" class="text-center pa-4">
@@ -134,7 +174,6 @@
                 </div>
               </v-card-text>
               
-              <!-- Bottom button section -->
               <v-card-actions class="pa-4">
                 <v-btn
                   class="bg-primary text-background text-capitalize"
@@ -145,98 +184,16 @@
                 </v-btn>
               </v-card-actions>
             </v-card>
-          </div>
-
-          <!-- Row 2: Key Topics + Suggestions & Sentiment Analysis -->
-          <div class="row-2">
-            <!-- Left side: Key Topics + Suggestions -->
-            <div class="topics-suggestions">
-              <!-- Key Topics -->
-              <v-card class="rounded-lg elevation-2">
-                <v-card-title class="text-h6 text-capitalize flex-shrink-0"
-                  >Key Words</v-card-title
-                >
-                <v-card-text class="px-4">
-                  <v-chip-group v-if="!loading && keywordsList.length > 0">
-                    <v-chip
-                      v-for="keyword in keywordsList"
-                      :key="keyword"
-                      :class="[
-                        'ma-0 mr-3 cursor-pointer',
-                        isKeywordSelected(keyword) ? 'bg-primary' : 'bg-info',
-                      ]"
-                      text-color="white"
-                      @click="selectKeyword(keyword)"
-                    >
-                      {{ keyword }}
-                    </v-chip>
-                  </v-chip-group>
-                  <div v-else-if="loading" class="text-center pa-4">
-                    <v-progress-circular
-                      indeterminate
-                      size="24"
-                    ></v-progress-circular>
-                    <p class="mt-2">Loading keywords...</p>
-                  </div>
-                  <div v-else class="text-center pa-4 text-grey">
-                    No keywords available
-                  </div>
-                </v-card-text>
-              </v-card>
-
-              <!-- Suggestions -->
-              <v-card
-                class="rounded-lg elevation-2 d-flex flex-column"
-                style="flex: 1"
-              >
-                <v-card-title class="text-h6 text-foreground flex-shrink-0"
-                  >Admin Suggestions</v-card-title
-                >
-                <v-card-text
-                  class="d-flex flex-column ga-2 text-body-1 text-secForeground flex-grow-1 overflow-y-auto"
-                >
-                  <div v-if="!loading && agentNextSteps.length > 0">
-                    <div
-                      v-for="item in agentNextSteps"
-                      class="d-flex ga-2 mb-2"
-                    >
-                      <p>•</p>
-                      <p>{{ item }}</p>
-                    </div>
-                  </div>
-                  <div v-else-if="loading" class="text-center pa-4">
-                    <v-progress-circular
-                      indeterminate
-                      size="24"
-                    ></v-progress-circular>
-                    <p class="mt-2">Loading suggestions...</p>
-                  </div>
-                  <div v-else class="text-center pa-4 text-grey">
-                    No suggestions available
-                  </div>
-                </v-card-text>
-                <!-- <v-card-actions class="pa-2 flex-shrink-0">
-                  <v-btn
-                    text
-                    color="primary"
-                    class="text-capitalize px-2"
-                    @click="viewFullTranscript"
-                    >View full transcript >
-                  </v-btn>
-                </v-card-actions> -->
-              </v-card>
-            </div>
 
             <!-- Sentiment Analysis Card -->
-            <v-card class="rounded-lg elevation-2 d-flex flex-column">
-              <v-card-title class="text-h6 text-foreground flex-shrink-0"
-                >Sentiment Analysis</v-card-title
-              >
+            <v-card class="rounded-lg elevation-2">
+              <v-card-title class="text-h6 text-foreground">
+                Sentiment Analysis
+              </v-card-title>
               <v-card-text
-                class="pa-4 d-flex flex-column ga-3 flex-grow-1"
+                class="pa-4 d-flex flex-column ga-3"
                 v-if="!loading"
               >
-                <!-- Dynamic Sentiment Items -->
                 <div
                   v-for="sentiment in sentimentConfig"
                   :key="sentiment.key"
@@ -764,37 +721,50 @@ onMounted(() => {
   transition: all 0.2s ease;
 }
 
-.admin-layout {
-  display: grid;
-  grid-template-rows: auto 1fr;
+.admin-dashboard {
+  display: flex;
   gap: 20px;
-  height: 100%;
+  align-items: flex-start;
+  width: 100%;
 }
 
-.row-1 {
-  display: grid;
-  grid-template-columns: 3fr 1fr;
-  gap: 20px;
-  align-items: stretch;
+.left-column {
+  flex: 1;
+  max-width: 75%;
+  display: flex;
+  flex-direction: column;
 }
 
-.row-2 {
-  display: grid;
-  grid-template-columns: 3fr 1fr;
-  gap: 20px;
-  align-items: stretch;
+.right-column {
+  flex: 0 1 auto;
+  width: 25%;
+  display: flex;
+  flex-direction: column;
 }
 
-.topics-suggestions {
-  display: grid;
-  grid-template-rows: auto 1fr;
-  gap: 20px;
+/* Ensure cards are responsive to their container */
+.left-column .v-card,
+.right-column .v-card {
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
-/* Ensure cards in each row have equal heights */
-.row-1 > .v-card,
-.row-2 > .v-card,
-.row-2 > .topics-suggestions {
-  height: 100%;
+/* Ensure card content doesn't overflow */
+.right-column .v-card-text {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Force right column to not overflow */
+.right-column {
+  max-width: 28%;
+  overflow: hidden;
+}
+
+/* Override any Vuetify card width constraints */
+.right-column .v-card {
+  max-width: 100% !important;
+  flex-shrink: 1 !important;
 }
 </style>
