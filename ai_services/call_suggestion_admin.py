@@ -119,7 +119,7 @@ def analyze_call_and_generate_suggestions(session_id: int) -> dict:
         model = ChatGoogleGenerativeAI(model="gemini-2.0-flash", api_key=GOOGLE_API_KEY)
 
         analysis_prompt = f"""
-        Analyze the following customer service call transcript and provide comprehensive insights:
+        Analyze the following real estate sales call transcript and provide comprehensive insights focused on CUSTOMER ACQUISITION and RELATIONSHIP WARMING:
 
         CALL TRANSCRIPT:
         {conversation_text}
@@ -131,16 +131,24 @@ def analyze_call_and_generate_suggestions(session_id: int) -> dict:
             "customer_sentiment": "Positive/Negative/Neutral",
             "customer_needs": ["need1", "need2"],
             "admin_suggestions": [
-                "Specific action item 1",
-                "Specific action item 2", 
-                "Specific action item 3"
+                "Short, specific action to warm the customer and move toward sale",
+                "Follow-up action to maintain engagement", 
+                "Next step to convert interest into commitment"
             ],
             "follow_up_required": true/false,
             "priority_level": "High/Medium/Low",
             "next_steps": "Recommended next steps for the admin"
         }}
 
-        Focus on actionable insights that will help the admin provide better customer service.
+        ADMIN SUGGESTIONS REQUIREMENTS:
+        - Focus on SALES ACQUISITION and customer relationship warming
+        - Keep each suggestion to 1 line (max 15 words)
+        - Be specific and immediately actionable
+        - NO bullet symbols (•) - output one suggestion per line
+        - Prioritize follow-up timing, personalized outreach, and closing opportunities
+        - Examples: "Send property brochure within 2 hours", "Schedule callback in 3 days", "Invite to weekend show gallery"
+
+        Focus on actionable insights that will help convert this lead into a sale.
         """
 
         try:

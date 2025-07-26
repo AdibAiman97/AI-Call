@@ -22,7 +22,19 @@ def summarize_text(conversation: List[Dict[str, str]], call_session_id: int) -> 
         formatted_conversation = "\n".join([
             f"{msg['role']}: {msg['content']}" for msg in conversation
         ])
-        summary_prompt = f"Please provide a concise summary of the following conversation:\n\n{formatted_conversation}"
+        summary_prompt = f"""Create a concise professional summary of this real estate consultation call:
+
+Requirements:
+- Keep summary short and to the point (3-5 points maximum)
+- NO bullet symbols (•) or any special formatting
+- Include: property discussed, key preferences, budget/timeline, next steps
+- Professional tone suitable for both customer and admin
+- Output as separate lines without bullet symbols - frontend will format as list
+
+Call Transcript:
+{formatted_conversation}
+
+Summary (one point per line, no bullets):"""
         response = model.invoke(summary_prompt)
         summary = response.content
         return summary

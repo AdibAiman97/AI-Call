@@ -216,24 +216,29 @@ def analyze_overall_conversation_sentiment(session_id: int) -> str:
         overall_prompt = ChatPromptTemplate.from_messages([
             (
                 "system",
-                """You are an expert in sentiment analysis for customer service conversations. 
-                Analyze the OVERALL sentiment of the entire conversation flow and provide:
-                1. Overall conversation sentiment
-                2. Sentiment breakdown (estimated percentages)
-                3. Key sentiment drivers
+                """You are an expert in sentiment analysis for real estate customer conversations. 
+                Analyze the OVERALL sentiment of the entire conversation and provide balanced analysis.
+                
+                IMPORTANT: Ensure percentages are realistic and balanced:
+                - Most conversations have mixed sentiment (not 100% in one category)
+                - Typical distributions: 60-70% dominant, 20-30% neutral, 10-20% other
+                - Even positive conversations may have 10-20% neutral/concerned moments
+                - Professional inquiries often have 40-60% neutral content
                 
                 Return ONLY a valid JSON object:
                 {{
                     "sentiment": "Positive" | "Negative" | "Neutral",
-                    "confidence": 0.95,
+                    "confidence": 0.85,
                     "explanation": "Brief explanation of overall conversation tone",
                     "sentiment_breakdown": {{
-                        "positive_percentage": 70,
-                        "neutral_percentage": 20, 
+                        "positive_percentage": 60,
+                        "neutral_percentage": 30, 
                         "negative_percentage": 10
                     }},
-                    "key_drivers": ["What made this conversation positive/negative/neutral"]
+                    "key_drivers": ["Key factors that influenced the sentiment"]
                 }}
+                
+                Provide realistic, balanced sentiment percentages that reflect real conversation dynamics.
                 """
             ),
             ("user", "Analyze the overall sentiment of this customer service conversation:\n\n{conversation}")
@@ -245,13 +250,29 @@ def analyze_overall_conversation_sentiment(session_id: int) -> str:
         # Parse the response
         analysis_data = extract_json_from_response(result)
         
-        # Convert percentages to counts for database storage
-        total_messages = len([t for t in transcripts if t.message and t.message.strip()])
-        breakdown = analysis_data.get("sentiment_breakdown", {"positive_percentage": 33, "neutral_percentage": 34, "negative_percentage": 33})
+        # Normalize percentages to ensure they total 100%
+        breakdown = analysis_data.get("sentiment_breakdown", {"positive_percentage": 34, "neutral_percentage": 33, "negative_percentage": 33})
         
-        positive_count = max(1, int(total_messages * breakdown.get("positive_percentage", 33) / 100))
-        neutral_count = max(1, int(total_messages * breakdown.get("neutral_percentage", 34) / 100))
-        negative_count = max(0, total_messages - positive_count - neutral_count)
+        positive_pct = max(0, breakdown.get("positive_percentage", 34))
+        neutral_pct = max(0, breakdown.get("neutral_percentage", 33))
+        negative_pct = max(0, breakdown.get("negative_percentage", 33))
+        
+        # Normalize to 100%
+        total_pct = positive_pct + neutral_pct + negative_pct
+        if total_pct > 0:
+            positive_pct = round(positive_pct * 100 / total_pct)
+            neutral_pct = round(neutral_pct * 100 / total_pct)
+            negative_pct = 100 - positive_pct - neutral_pct  # Ensure exact 100% total
+        else:
+            positive_pct, neutral_pct, negative_pct = 34, 33, 33
+        
+        # Convert to counts for database storage (maintaining percentage logic)
+        positive_count = positive_pct
+        neutral_count = neutral_pct
+        negative_count = negative_pct
+        
+        # Count total meaningful messages for reference
+        total_messages = len([t for t in transcripts if t.message and t.message.strip()])
         
         return json.dumps({
             "success": True,
@@ -325,24 +346,29 @@ def analyze_conversation_sentiment(session_id: int) -> str:
         overall_prompt = ChatPromptTemplate.from_messages([
             (
                 "system",
-                """You are an expert in sentiment analysis for customer service conversations. 
-                Analyze the OVERALL sentiment of the entire conversation flow and provide:
-                1. Overall conversation sentiment
-                2. Sentiment breakdown (estimated percentages)
-                3. Key sentiment drivers
+                """You are an expert in sentiment analysis for real estate customer conversations. 
+                Analyze the OVERALL sentiment of the entire conversation and provide balanced analysis.
+                
+                IMPORTANT: Ensure percentages are realistic and balanced:
+                - Most conversations have mixed sentiment (not 100% in one category)
+                - Typical distributions: 60-70% dominant, 20-30% neutral, 10-20% other
+                - Even positive conversations may have 10-20% neutral/concerned moments
+                - Professional inquiries often have 40-60% neutral content
                 
                 Return ONLY a valid JSON object:
                 {{
                     "sentiment": "Positive" | "Negative" | "Neutral",
-                    "confidence": 0.95,
+                    "confidence": 0.85,
                     "explanation": "Brief explanation of overall conversation tone",
                     "sentiment_breakdown": {{
-                        "positive_percentage": 70,
-                        "neutral_percentage": 20, 
+                        "positive_percentage": 60,
+                        "neutral_percentage": 30, 
                         "negative_percentage": 10
                     }},
-                    "key_drivers": ["What made this conversation positive/negative/neutral"]
+                    "key_drivers": ["Key factors that influenced the sentiment"]
                 }}
+                
+                Provide realistic, balanced sentiment percentages that reflect real conversation dynamics.
                 """
             ),
             ("user", "Analyze the overall sentiment of this customer service conversation:\n\n{conversation}")
@@ -354,13 +380,29 @@ def analyze_conversation_sentiment(session_id: int) -> str:
         # Parse the response
         analysis_data = extract_json_from_response(result)
         
-        # Convert percentages to counts for database storage
-        total_messages = len([t for t in transcripts if t.message and t.message.strip()])
-        breakdown = analysis_data.get("sentiment_breakdown", {"positive_percentage": 33, "neutral_percentage": 34, "negative_percentage": 33})
+        # Normalize percentages to ensure they total 100%
+        breakdown = analysis_data.get("sentiment_breakdown", {"positive_percentage": 34, "neutral_percentage": 33, "negative_percentage": 33})
         
-        positive_count = max(1, int(total_messages * breakdown.get("positive_percentage", 33) / 100))
-        neutral_count = max(1, int(total_messages * breakdown.get("neutral_percentage", 34) / 100))
-        negative_count = max(0, total_messages - positive_count - neutral_count)
+        positive_pct = max(0, breakdown.get("positive_percentage", 34))
+        neutral_pct = max(0, breakdown.get("neutral_percentage", 33))
+        negative_pct = max(0, breakdown.get("negative_percentage", 33))
+        
+        # Normalize to 100%
+        total_pct = positive_pct + neutral_pct + negative_pct
+        if total_pct > 0:
+            positive_pct = round(positive_pct * 100 / total_pct)
+            neutral_pct = round(neutral_pct * 100 / total_pct)
+            negative_pct = 100 - positive_pct - neutral_pct  # Ensure exact 100% total
+        else:
+            positive_pct, neutral_pct, negative_pct = 34, 33, 33
+        
+        # Convert to counts for database storage (maintaining percentage logic)
+        positive_count = positive_pct
+        neutral_count = neutral_pct
+        negative_count = negative_pct
+        
+        # Count total meaningful messages for reference
+        total_messages = len([t for t in transcripts if t.message and t.message.strip()])
         
         return json.dumps({
             "success": True,

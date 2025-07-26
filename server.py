@@ -233,7 +233,7 @@ async def process_call_session_ai(call_session_id: int):
                 # Extract the admin suggestions from the analysis
                 analysis_data = analysis_result["analysis"]
                 admin_suggestions_list = analysis_data.get("admin_suggestions", [])
-                admin_suggestions = "\n".join([f"• {suggestion}" for suggestion in admin_suggestions_list])
+                admin_suggestions = "\n".join(admin_suggestions_list)
                 print(f"✅ Admin analysis generated: {admin_suggestions[:100]}...")
             else:
                 print(f"⚠️ Admin analysis failed or incomplete: {analysis_result}")
@@ -270,22 +270,56 @@ async def process_call_session_ai(call_session_id: int):
 
                 key_words = None
                 try:
-                    all_text = " ".join(
-                        [msg["content"] for msg in formatted_conversation]
-                    )
-                    words = all_text.split()
-                    key_words_list = list(
-                        set(
-                            [
-                                word.strip(".,!?").lower()
-                                for word in words
-                                if len(word.strip(".,!?")) > 3
-                            ]
-                        )
-                    )[:10]
-                    key_words = ", ".join(key_words_list)
+                    # Extract keywords from the summary using AI for better relevance
+                    if summary:
+                        from langchain_google_genai import ChatGoogleGenerativeAI
+                        keyword_model = ChatGoogleGenerativeAI(model="gemini-2.0-flash", api_key=GOOGLE_API_KEY)
+                        
+                        keyword_prompt = f"""Extract 5-8 important keywords from this real estate call summary that admins should note:
+
+Summary: {summary}
+
+Requirements:
+- Focus on property names, locations, features, customer details
+- Include budget ranges, timeline mentions, specific requirements  
+- Highlight decision factors, concerns, or positive indicators
+- Use phrases like "Mori Pines", "RM500K budget", "urgent timeline"
+- Keep each keyword/phrase under 3 words
+- Separate with commas
+
+Important Keywords:"""
+                        
+                        keyword_response = keyword_model.invoke(keyword_prompt)
+                        key_words = keyword_response.content.strip()
+                        
+                        # Fallback to basic extraction if AI fails
+                        if not key_words or len(key_words) < 10:
+                            raise Exception("AI keyword extraction failed")
+                            
+                        print(f"✅ AI-extracted keywords: {key_words}")
+                    else:
+                        raise Exception("No summary available for keyword extraction")
+                        
                 except Exception as kw_error:
-                    print(f"   ⚠️ Could not extract key words: {kw_error}")
+                    print(f"   ⚠️ AI keyword extraction failed, using fallback: {kw_error}")
+                    # Fallback to basic extraction with better filtering
+                    try:
+                        all_text = " ".join([msg["content"] for msg in formatted_conversation])
+                        # Focus on real estate and sales relevant keywords
+                        important_words = []
+                        real_estate_terms = ["property", "house", "condo", "apartment", "mori", "pines", "gamuda", "cove", "enso", "woods", 
+                                           "budget", "price", "investment", "viewing", "appointment", "interested", "consider"]
+                        
+                        for word in all_text.lower().split():
+                            clean_word = word.strip(".,!?()[]")
+                            if (len(clean_word) > 4 and clean_word.isalpha()) or clean_word in real_estate_terms:
+                                important_words.append(clean_word)
+                        
+                        key_words_list = list(set(important_words))[:8]
+                        key_words = ", ".join(key_words_list)
+                    except Exception as fallback_error:
+                        print(f"   ❌ Fallback keyword extraction also failed: {fallback_error}")
+                        key_words = "general inquiry, customer call"
 
                 update_data = CallSessionUpdate(
                     end_time=end_time.isoformat(),
