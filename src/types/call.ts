@@ -16,5 +16,5 @@ export interface CallState {
   duration: number
   messages: ConversationMessage[]
   error?: string
-  callSessionId: number | null
+  callSessionId?: number | null
 }

@@ -97,7 +97,8 @@ useHotkey(
   "g",
   () => {
     console.log("call-summary");
-    router.push("/call-summary");
+    console.log("Navigating to call-summary with ID:", callStore.callSessionId);
+    router.push({ path: "/call-summary", query: { id: callStore.callSessionId } });
   },
   { shift: false, command: true }
 );
@@ -117,7 +118,7 @@ const endCall = async () => {
     callStore.endCall();
 
     // Navigate back to landing page
-    await router.push("/call-summary");
+    await router.push({ path: "/call-summary", query: { id: callStore.callSessionId } });
   } catch (error) {
     console.error("Error ending call:", error);
   } finally {

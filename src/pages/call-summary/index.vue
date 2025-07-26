@@ -11,6 +11,7 @@
     Loading call information...
   </p>
 
+
   <!-- Summary Content -->
   <div class="d-flex flex-column">
     <v-card class="mb-6 flex-grow-1 rounded-lg mr-md-4 w-100 elevation-2">
@@ -80,7 +81,7 @@
 
 <script setup>
 import { useHotkey } from '@/utils/Hotkey'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
 useHotkey('a', () => {
@@ -104,31 +105,169 @@ const loading = ref(true);
 
 const callStore = useCallStore();
 
+// Local fallback formatTime function
+// const formatDuration = (timeInSecs) => {
+//   if (!timeInSecs || isNaN(timeInSecs)) return 'Duration not available';
+  
+//   const minutes = Math.floor(timeInSecs / 60);
+//   const seconds = timeInSecs % 60;
+
+//   if (minutes === 0) {
+//     return `${seconds} second${seconds !== 1 ? "s" : ""}`;
+//   } else if (seconds === 0) {
+//     return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
+//   } else {
+//     return `${minutes} minute${minutes !== 1 ? "s" : ""} ${seconds} second${
+//       seconds !== 1 ? "s" : ""
+//     }`;
+//   }
+// };
+
 const fetchCallSessionData = async () => {
   try {
+    loading.value = true;
+    
+    console.log('📊 Call Summary - Debug Info:');
+    console.log('  callStore.callSessionId:', callStore.callSessionId);
+    console.log('  typeof callSessionId:', typeof callStore.callSessionId);
+    console.log('  callStore state:', callStore.$state);
+    
+    if (!callStore.callSessionId) {
+      // Try to get from URL params as fallback  
+      const urlParams = new URLSearchParams(window.location.search);
+      const sessionId = urlParams.get('sessionId') || urlParams.get('id');
+      
+      // Also try Vue router query params
+      const route = useRoute();
+      const routeSessionId = route.query.sessionId || route.query.id;
+      
+      const finalSessionId = sessionId || routeSessionId;
+      
+      if (finalSessionId) {
+        console.log('📊 Using session ID from params:', finalSessionId);
+        callStore.setCallSessionId(parseInt(finalSessionId.toString()));
+      } else {
+        console.error('❌ No call session ID available in store, URL params, or route params');
+        throw new Error("No call session ID available");
+      }
+    }
+    
+    console.log(`📊 Fetching call session data for ID: ${callStore.callSessionId}`);
+    
     const response = await fetch(
-      `${import.meta.env.VITE_API_BASE_URL}/call_session/${
-        callStore.callSessionId
-      }`
+      `${import.meta.env.VITE_API_BASE_URL}/call_session/${callStore.callSessionId}`
     );
 
-    console.log("From Call Summary", response.data);
     if (!response.ok) {
-      throw new Error("Failed to fetch call session data");
+      throw new Error(`Failed to fetch call session data: ${response.status} ${response.statusText}`);
     }
+    
     const data = await response.json();
+    console.log("📊 Raw call session data received:", data);
     callSessionData.value = data;
 
-    if (data.summarized_content) {
-      summaryList.value = data.summarized_content
-        .split("\n")
-        .filter((item) => item.trim());
+    // Parse summarized content with detailed logging
+    console.log("📝 Raw summarized_content:", data.summarized_content);
+    if (data.summarized_content && data.summarized_content.trim()) {
+      const rawSummary = data.summarized_content;
+      console.log("📝 Processing summary of length:", rawSummary.length);
+      
+      // Split by lines and process each line
+      const summaryLines = rawSummary
+        .split(/\r?\n/)
+        .map((line, index) => {
+          const trimmed = line.trim();
+          console.log(`📝 Line ${index}: "${trimmed}"`);
+          return trimmed;
+        })
+        .filter((line) => {
+          // Keep lines that have meaningful content
+          const hasContent = line.length > 2 && 
+                           !line.match(/^(Summary:|Key Topics:|Call Summary:|CALL ANALYSIS|---)/i);
+          console.log(`📝 Line "${line.substring(0, 30)}..." kept: ${hasContent}`);
+          return hasContent;
+        })
+        .map((line) => {
+          // Clean up formatting but preserve content
+          return line.replace(/^[•\-\*\d+\.\)\s]+/, "").trim();
+        })
+        .filter((line) => line.length > 0);
+      
+      summaryList.value = summaryLines;
+      console.log("📝 Final summary list:", summaryLines);
     }
-    if (data.customer_suggestions) {
-      customerNextSteps.value = data.customer_suggestions
-        .split("\n")
-        .filter((item) => item.trim());
+    
+    // Parse customer suggestions with detailed logging  
+    console.log("💡 Raw customer_suggestions:", data.customer_suggestions);
+    if (data.customer_suggestions && data.customer_suggestions.trim()) {
+      const rawSuggestions = data.customer_suggestions;
+      console.log("💡 Processing suggestions of length:", rawSuggestions.length);
+      
+      // Split by lines and process each line
+      const suggestionLines = rawSuggestions
+        .split(/\r?\n/)
+        .map((line, index) => {
+          const trimmed = line.trim();
+          console.log(`💡 Line ${index}: "${trimmed}"`);
+          return trimmed;
+        })
+        .filter((line) => {
+          // Keep lines that have meaningful content
+          const hasContent = line.length > 2 && 
+                           !line.match(/^(Suggestions:|Based on|Okay,|Here are|---)/i);
+          console.log(`💡 Line "${line.substring(0, 30)}..." kept: ${hasContent}`);
+          return hasContent;
+        })
+        .map((line) => {
+          // Clean up formatting but preserve content
+          return line.replace(/^[•\-\*\d+\.\)\s]+/, "").trim();
+        })
+        .filter((line) => line.length > 0);
+      
+      customerNextSteps.value = suggestionLines;
+      console.log("💡 Final suggestions list:", suggestionLines);
     }
+    // Set fallback content if data is empty or wasn't processed correctly
+    if (summaryList.value.length === 0) {
+      if (data.summarized_content) {
+        console.log("⚠️ Summary content exists but couldn't be parsed properly");
+        console.log("Raw summary content:", data.summarized_content);
+        
+        // As a last resort, try to show the raw content directly (first 500 chars)
+        const rawPreview = data.summarized_content.substring(0, 500);
+        summaryList.value = [
+          "Call summary data found but formatting needs adjustment:",
+          rawPreview + (data.summarized_content.length > 500 ? "..." : "")
+        ];
+      } else {
+        console.log("ℹ️ No summary content available yet");
+        summaryList.value = [
+          "Call summary is being processed by AI.",
+          "Please refresh in a few moments or check that the call ended properly."
+        ];
+      }
+    }
+    
+    if (customerNextSteps.value.length === 0) {
+      if (data.customer_suggestions) {
+        console.log("⚠️ Customer suggestions exist but couldn't be parsed properly");
+        console.log("Raw customer suggestions:", data.customer_suggestions);
+        
+        // As a last resort, try to show the raw content directly (first 500 chars)
+        const rawPreview = data.customer_suggestions.substring(0, 500);
+        customerNextSteps.value = [
+          "Customer suggestions data found but formatting needs adjustment:",
+          rawPreview + (data.customer_suggestions.length > 500 ? "..." : "")
+        ];
+      } else {
+        console.log("ℹ️ No customer suggestions available yet");
+        customerNextSteps.value = [
+          "Customer suggestions are being generated by AI.",
+          "Please refresh in a few moments or check that the call ended properly."
+        ];
+      }
+    }
+    
   } catch (error) {
     console.error("Error fetching call session data:", error);
     summaryList.value = [
@@ -140,9 +279,26 @@ const fetchCallSessionData = async () => {
   }
 };
 
-const formatDateTime = (startTime) => {
-  if (!startTime) return "";
-  const date = new Date(startTime);
+const formatDateTime = (dateTimeString) => {
+  if (!dateTimeString) return "";
+  
+  // Handle both ISO string and datetime object formats
+  let date;
+  if (typeof dateTimeString === 'string') {
+    date = new Date(dateTimeString);
+  } else if (dateTimeString instanceof Date) {
+    date = dateTimeString;
+  } else {
+    console.warn('Unknown date format:', dateTimeString);
+    return "Invalid date";
+  }
+  
+  // Check if date is valid
+  if (isNaN(date.getTime())) {
+    console.warn('Invalid date:', dateTimeString);
+    return "Invalid date";
+  }
+  
   const options = {
     weekday: "long",
     hour: "2-digit",
@@ -165,14 +321,11 @@ const formatDuration = (durationSecs) => {
 };
 
 onMounted(() => {
-  // const callSessionId = route.query.id || route.params.id
-  // if (callSessionId) {
-  //   fetchCallSessionData(callSessionId)
-  // } else {
-  //   summaryList.value = ["No call session ID provided."]
-  //   customerNextSteps.value = ["Please return to the previous page and try again."]
-  //   loading.value = false
-  // }
+  // Debug: Check what's available on the call store
+  console.log('🔍 Call store object:', callStore);
+  console.log('🔍 Call store methods:', Object.getOwnPropertyNames(callStore));
+  console.log('🔍 formatTime function:', callStore.formatTime);
+  console.log('🔍 typeof formatTime:', typeof callStore.formatTime);
 
   fetchCallSessionData();
 });
