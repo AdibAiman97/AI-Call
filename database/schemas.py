@@ -91,9 +91,28 @@ class CallSessionResponse(BaseModel):
     summarized_content: Optional[str] = None
     customer_suggestions: Optional[str] = None
     admin_suggestions: Optional[str] = None
+    processing_status: Optional[str] = None
+    processing_progress: Optional[int] = None
 
     class Config:
         from_attributes = True
+
+
+class CallSessionWithStatus(BaseModel):
+    id: int
+    cust_id: str
+    start_time: datetime
+    end_time: Optional[datetime] = None
+    duration_secs: Optional[int] = None
+    positive: Optional[int] = None
+    neutral: Optional[int] = None
+    negative: Optional[int] = None
+    key_words: Optional[str] = None
+    summarized_content: Optional[str] = None
+    customer_suggestions: Optional[str] = None
+    admin_suggestions: Optional[str] = None
+    processing_status: str
+    processing_progress: int
 
 
 class CallSessionUpdate(CallSessionBase):

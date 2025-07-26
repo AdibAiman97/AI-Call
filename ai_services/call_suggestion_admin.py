@@ -17,7 +17,7 @@ from database.connection import get_db, SessionLocal
 import json
 
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 db_generator = get_db()
 
@@ -116,7 +116,7 @@ def analyze_call_and_generate_suggestions(session_id: int) -> dict:
         )
 
         # Generate analysis using Gemini
-        model = ChatGoogleGenerativeAI(model="gemini-2.0-flash", api_key=GEMINI_API_KEY)
+        model = ChatGoogleGenerativeAI(model="gemini-2.0-flash", api_key=GOOGLE_API_KEY)
 
         analysis_prompt = f"""
         Analyze the following customer service call transcript and provide comprehensive insights:
@@ -273,7 +273,7 @@ def get_suggestion_from_agent(session_id: int, query: str, message_by: str):
             ]
         )
 
-        model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", api_key=GEMINI_API_KEY)
+        model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", api_key=GOOGLE_API_KEY)
         tools = [
             create_session_message_tool,
             get_session_messages_tool,

@@ -7,7 +7,7 @@ class CallSession(Base):
     id = Column(Integer, primary_key=True, index=True)
     cust_id = Column(String, nullable=False)
     start_time = Column(DateTime(timezone=True), server_default=func.now())
-    end_time = Column(DateTime, nullable=True)
+    end_time = Column(DateTime(timezone=True), nullable=True)
     duration_secs = Column(Integer, nullable=True)
     positive = Column(Integer, nullable=True)
     neutral = Column(Integer, nullable=True)

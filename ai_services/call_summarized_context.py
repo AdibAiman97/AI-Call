@@ -5,10 +5,10 @@ import requests
 from typing import List, Dict
 
 load_dotenv()
-GEMINI_API_KEY=os.getenv("GEMINI_API_KEY")
+GOOGLE_API_KEY=os.getenv("GOOGLE_API_KEY")
 
 # Shared model instance
-model = ChatGoogleGenerativeAI(model="gemini-2.0-flash", api_key=GEMINI_API_KEY)
+model = ChatGoogleGenerativeAI(model="gemini-2.0-flash", api_key=GOOGLE_API_KEY)
 
 def summarize_text(conversation: List[Dict[str, str]], call_session_id: int) -> str:
     """Summarize the given conversation.
