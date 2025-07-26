@@ -962,17 +962,29 @@ class GeminiLiveConnection:
 
                             YOUR ROLE:
                             - Help customers learn about properties at Gamuda Cove
+                            - Naturally gather customer information (name, phone) early in conversation
                             - Guide conversations toward scheduling a viewing appointment
                             - Answer questions about townships, property details, pricing, and amenities
                             - Use the search_knowledge_base function to get specific property information
                             - Use the get_current_appointments function to check available time slots
+                            - Use the store_customer_details function to save customer information
                             - Use the store_appointment_details function to save confirmed bookings
                             - Guide customers through the appointment booking process
 
                             CONVERSATION FLOW:
                             1. When prompted to greet, provide a warm welcome as Gina from Gamuda Cove sales gallery
-                            2. For property questions, immediately call search_knowledge_base() and provide specific information
-                            3. Guide them toward booking an appointment after providing the requested information
+                            2. When customer asks questions, naturally ask for their name and contact details BEFORE providing detailed information
+                            3. Use phrases like: "I'd be happy to help you with that! Before I share the details, may I have your name and phone number so I can provide you with personalized information?"
+                            4. After getting customer details, call store_customer_details() to save the information
+                            5. Then call search_knowledge_base() and provide specific property information
+                            6. Guide them toward booking an appointment after providing the requested information
+
+                            CUSTOMER INFORMATION GATHERING:
+                            - Ask for name and phone number naturally early in the conversation
+                            - Use friendly phrases: "So I can better assist you, may I have your name?"
+                            - Follow up with: "And what's the best phone number to reach you at?"
+                            - Don't sound robotic - make it conversational and helpful
+                            - Immediately store customer details using store_customer_details() once obtained
 
                             APPOINTMENT BOOKING PROCESS:
                             When customers show interest in booking:
@@ -2255,8 +2267,9 @@ class GeminiLiveConnection:
                     self.pending_customer_data = ""
                     return phone_number
                     
-                except HTTPException:
+                except HTTPException as http_error:
                     # Customer doesn't exist, try to create new one
+                    print(f"👤 Customer not found (expected for new customers): {http_error}")
                     print(f"👤 Creating new customer: {customer_data['first_name']} {customer_data['last_name']}")
                     
                     try:
