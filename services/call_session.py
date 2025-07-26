@@ -64,3 +64,14 @@ class CallSessionService:
         self.db.delete(call_session)
         self.db.commit()
         return True
+
+    def update_call_session_customer_id(self, call_session_id: int, customer_phone: str) -> Optional[CallSession]:
+        """Update the customer ID for a call session."""
+        call_session = self.db.query(CallSession).filter(CallSession.id == call_session_id).first()
+        if not call_session:
+            return None
+        
+        call_session.cust_id = customer_phone
+        self.db.commit()
+        self.db.refresh(call_session)
+        return call_session

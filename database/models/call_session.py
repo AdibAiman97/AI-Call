@@ -16,3 +16,4 @@ class CallSession(Base):
     summarized_content = Column(String, nullable=True)
     customer_suggestions = Column(String, nullable=True)
     admin_suggestions = Column(String, nullable=True)
+    pending_customer_data = Column(String, nullable=True)  # Store customer details during call for processing after call ends

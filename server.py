@@ -53,6 +53,7 @@ from ai_services.sentiment_tool import analyze_sentiment_from_transcript
 from services.appointment_crud import AppointmentCRUD
 from datetime import datetime, timedelta
 import re
+from services.customer_crud import CustomerCRUD
 
 # Setup logging to both console and file
 logging.basicConfig(
@@ -623,6 +624,89 @@ def parse_appointment_string(appointment_str: str, call_session_id: int) -> dict
         print(f"❌ Original string: {appointment_str}")
         raise e
 
+
+def parse_customer_string(customer_str: str) -> dict:
+    """
+    Parse customer string into database-compatible format.
+    
+    Expected format: "Name: [Name], Phone: [Phone], Budget: [Budget], Preferences: [Preferences], Notes: [Notes]"
+    Returns dict compatible with CustomerCRUD.create_customer()
+    """
+    try:
+        # Initialize customer data with defaults
+        customer_data = {
+            "first_name": "Unknown",
+            "last_name": "",
+            "email": "unknown@example.com",  # Default email since it's required
+            "phone_number": None,
+            "budget": 0,
+            "purchase_purpose": "Not specified",
+            "preferred_location": "Not specified"
+        }
+        
+        # Parse customer name
+        name_match = re.search(r'Name:\s*([^,]+)', customer_str, re.IGNORECASE)
+        if name_match:
+            full_name = name_match.group(1).strip()
+            if full_name and full_name.lower() != "unknown":
+                # Split name into first and last
+                name_parts = full_name.split()
+                customer_data["first_name"] = name_parts[0] if name_parts else "Unknown"
+                customer_data["last_name"] = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
+        
+        # Parse phone number
+        phone_match = re.search(r'Phone:\s*([^,]+)', customer_str, re.IGNORECASE)
+        if phone_match:
+            phone = phone_match.group(1).strip()
+            if phone and phone.lower() not in ["unknown", "not provided"]:
+                customer_data["phone_number"] = phone
+        
+        # Parse budget
+        budget_match = re.search(r'Budget:\s*([^,]+)', customer_str, re.IGNORECASE)
+        if budget_match:
+            budget_str = budget_match.group(1).strip()
+            if budget_str and budget_str.lower() not in ["unknown", "not specified"]:
+                # Extract numbers from budget string
+                budget_numbers = re.findall(r'[\d,]+', budget_str.replace(',', ''))
+                if budget_numbers:
+                    try:
+                        # Take the first number found as the budget
+                        customer_data["budget"] = int(budget_numbers[0])
+                    except ValueError:
+                        pass
+        
+        # Parse preferences
+        pref_match = re.search(r'Preferences:\s*([^,]+)', customer_str, re.IGNORECASE)
+        if pref_match:
+            preferences = pref_match.group(1).strip()
+            if preferences and preferences.lower() not in ["unknown", "not specified"]:
+                customer_data["purchase_purpose"] = preferences[:100]  # Limit length
+        
+        # Parse notes for additional location info
+        notes_match = re.search(r'Notes:\s*(.+)', customer_str, re.IGNORECASE)
+        if notes_match:
+            notes = notes_match.group(1).strip()
+            if notes and notes.lower() not in ["unknown", "not specified"]:
+                # Look for location keywords in notes
+                location_keywords = ["kuala lumpur", "kl", "selangor", "pj", "petaling jaya", "klang", "shah alam"]
+                notes_lower = notes.lower()
+                for keyword in location_keywords:
+                    if keyword in notes_lower:
+                        customer_data["preferred_location"] = keyword.title()
+                        break
+                else:
+                    # If no specific location found, use first part of notes
+                    customer_data["preferred_location"] = notes[:50]
+        
+        print(f"👤 Parsed customer: {customer_data['first_name']} {customer_data['last_name']}, Phone: {customer_data['phone_number']}")
+        return customer_data
+        
+    except Exception as e:
+        print(f"❌ Error parsing customer string: {e}")
+        print(f"❌ Original string: {customer_str}")
+        raise e
+
+
 class GeminiLiveConnection:
     """Manages connection to Gemini Live API for a WebSocket client."""
 
@@ -654,6 +738,7 @@ class GeminiLiveConnection:
         self._processing_response = False  # Flag to prevent duplicate processing
         self._initial_greeting_sent = False  # Flag to prevent duplicate initial greeting
         self.pending_appointment_data = ""  # Store appointment details during call session
+        self.pending_customer_data = ""  # Store customer details during call session
         
     async def connect_to_gemini(self):
         """Connect to Gemini Live API."""
@@ -745,6 +830,43 @@ class GeminiLiveConnection:
                         }
                     },
                     "required": ["appointment_details"]
+                }
+            }
+            
+            # Define customer storage function for Gemini to call
+            store_customer_function_declaration = {
+                "name": "store_customer_details",
+                "description": """
+                Use this function to store customer details during the call session.
+                
+                WHEN TO CALL:
+                1. When customer provides their name during conversation
+                2. When customer mentions their phone number
+                3. When customer discusses their budget range or investment amount
+                4. When customer talks about what they're looking for or their requirements
+                5. As soon as you have ANY customer details, even partial information
+                
+                IMPORTANT: Call this function as soon as you get any customer information, even if incomplete.
+                The system will use this data to create/update customer records after the call ends.
+                
+                Store all available customer information in one string including:
+                - Customer full name (if provided)
+                - Customer phone number (if provided)  
+                - Budget range or investment amount (if mentioned)
+                - Property preferences or requirements (if discussed)
+                - Any other relevant customer details
+                
+                This stores the data temporarily during the call for processing after the call ends.
+                """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "customer_details": {
+                            "type": "string",
+                            "description": "Customer information in format: 'Name: [Full Name or Unknown], Phone: [Phone Number or Unknown], Budget: [Budget Range or Unknown], Preferences: [Property preferences or Unknown], Notes: [Any additional customer info]'"
+                        }
+                    },
+                    "required": ["customer_details"]
                 }
             }
             
@@ -847,6 +969,14 @@ class GeminiLiveConnection:
                             - After gathering customer name, phone, date, and time
                             - Before telling customer "your appointment is confirmed"
                             - To save the booking details during the call
+                            
+                            🚨 MUST CALL store_customer_details() FOR:
+                            - As soon as customer provides their name (even first name only)
+                            - When customer mentions their phone number or contact details
+                            - When customer discusses budget, investment amount, or price range
+                            - When customer talks about property preferences or requirements
+                            - ANY time you get customer information, even if partial or incomplete
+                            - Update the stored details if you get additional customer information later
 
                             CRITICAL ANTI-HALLUCINATION RULES:
                             - You can ONLY use information returned by function calls
@@ -863,7 +993,7 @@ class GeminiLiveConnection:
             # Add tools
             setup_message["setup"]["tools"] = [
                 {
-                    "function_declarations": [rag_function_declaration, appointment_function_declaration, store_appointment_function_declaration]
+                    "function_declarations": [rag_function_declaration, appointment_function_declaration, store_appointment_function_declaration, store_customer_function_declaration]
                 }
             ]
             print(f"📤 Sending setup to Gemini ({GEMINI_MODEL}) with RAG, appointment retrieval, and appointment storage functions")
@@ -1673,6 +1803,50 @@ class GeminiLiveConnection:
                         print(f"⚠️ Empty appointment details provided")
                         await self.gemini_ws.send(json.dumps(function_response))
                     
+                elif function_name == 'store_customer_details':
+                    # Store customer details temporarily during call session
+                    customer_details = function_args.get('customer_details', '')
+                    print(f"👤 Storing customer details during call session")
+                    
+                    if customer_details.strip():
+                        # Store the customer data in the session
+                        self.pending_customer_data = customer_details.strip()
+                        
+                        print(f"👤 Customer stored: {customer_details}")
+                        
+                        result_text = f"Customer details have been successfully recorded for this call session. The customer information will be processed when the call ends."
+                        
+                        # Send confirmation to Gemini
+                        function_response = {
+                            "tool_response": {
+                                "function_responses": [{
+                                    "id": function_id,
+                                    "name": function_name,
+                                    "response": {"result": {"string_value": result_text}}
+                                }]
+                            }
+                        }
+                        
+                        print(f"📤 Sending customer storage confirmation to Gemini")
+                        await self.gemini_ws.send(json.dumps(function_response))
+                        print(f"✅ Customer storage confirmation sent")
+                        
+                    else:
+                        result_text = "No customer details provided. Please provide available customer information."
+                        
+                        function_response = {
+                            "tool_response": {
+                                "function_responses": [{
+                                    "id": function_id,
+                                    "name": function_name,
+                                    "response": {"result": {"string_value": result_text}}
+                                }]
+                            }
+                        }
+                        
+                        print(f"⚠️ Empty customer details provided")
+                        await self.gemini_ws.send(json.dumps(function_response))
+                    
                 else:
                     print(f"❓ Unknown function: {function_name}")
 
@@ -2008,6 +2182,100 @@ class GeminiLiveConnection:
             print(f"❌ Error processing pending appointment: {e}")
             logger.error(f"Error processing pending appointment for call {self.call_session_id}: {e}")
             # Don't re-raise - we want call cleanup to continue even if appointment fails
+
+    async def process_pending_customer(self):
+        """Process and save pending customer data to database when call ends."""
+        if not self.pending_customer_data:
+            print("👤 No pending customer data to process")
+            return None
+            
+        try:
+            print(f"👤 Processing pending customer for call session {self.call_session_id}")
+            print(f"👤 Customer data: {self.pending_customer_data}")
+            
+            # Parse the customer string
+            customer_data = parse_customer_string(self.pending_customer_data)
+            
+            # Check if we have a valid phone number to use as customer ID
+            if not customer_data.get("phone_number"):
+                print("⚠️ No phone number provided in customer data, cannot create customer record")
+                return None
+            
+            # Get database session
+            db = next(get_db())
+            phone_number = customer_data["phone_number"]
+            
+            try:
+                # Check if customer already exists
+                try:
+                    existing_customer = CustomerCRUD.get_customer_by_phone(db, phone_number)
+                    print(f"👤 Customer already exists: {existing_customer.first_name} {existing_customer.last_name}")
+                    
+                    # Update call session with existing customer's phone number
+                    call_session_service = CallSessionService(db)
+                    call_session_service.update_call_session_customer_id(self.call_session_id, phone_number)
+                    print(f"✅ Call session {self.call_session_id} updated with existing customer phone: {phone_number}")
+                    
+                    # Clear the pending data
+                    self.pending_customer_data = ""
+                    return phone_number
+                    
+                except HTTPException:
+                    # Customer doesn't exist, try to create new one
+                    print(f"👤 Creating new customer: {customer_data['first_name']} {customer_data['last_name']}")
+                    
+                    try:
+                        created_customer = CustomerCRUD.create_customer(db, customer_data)
+                        
+                        print(f"✅ Customer successfully created in database:")
+                        print(f"   Phone: {created_customer.phone_number}")
+                        print(f"   Name: {created_customer.first_name} {created_customer.last_name}")
+                        print(f"   Email: {created_customer.email}")
+                        print(f"   Budget: {created_customer.budget}")
+                        
+                        # Update call session with new customer's phone number
+                        call_session_service = CallSessionService(db)
+                        call_session_service.update_call_session_customer_id(self.call_session_id, phone_number)
+                        print(f"✅ Call session {self.call_session_id} updated with new customer phone: {phone_number}")
+                        
+                        # Clear the pending data after successful save
+                        self.pending_customer_data = ""
+                        return phone_number
+                        
+                    except HTTPException as create_error:
+                        # Customer creation failed, likely due to duplicate
+                        print(f"⚠️ Customer creation failed (likely duplicate): {create_error}")
+                        
+                        # Try to get the existing customer again and update call session
+                        try:
+                            existing_customer = CustomerCRUD.get_customer_by_phone(db, phone_number)
+                            print(f"👤 Found existing customer after create failure: {existing_customer.first_name} {existing_customer.last_name}")
+                            
+                            # Update call session with existing customer's phone number
+                            call_session_service = CallSessionService(db)
+                            call_session_service.update_call_session_customer_id(self.call_session_id, phone_number)
+                            print(f"✅ Call session {self.call_session_id} updated with existing customer phone: {phone_number}")
+                            
+                            # Clear the pending data
+                            self.pending_customer_data = ""
+                            return phone_number
+                            
+                        except Exception as fallback_error:
+                            print(f"❌ Failed to update call session with existing customer: {fallback_error}")
+                            raise fallback_error
+                    
+            except Exception as db_error:
+                print(f"❌ Database error processing customer: {db_error}")
+                logger.error(f"Failed to process customer in database: {db_error}")
+                raise db_error
+            finally:
+                db.close()
+                
+        except Exception as e:
+            print(f"❌ Error processing pending customer: {e}")
+            logger.error(f"Error processing pending customer for call {self.call_session_id}: {e}")
+            # Don't re-raise - we want call cleanup to continue even if customer processing fails
+            return None
 
     async def disconnect(self):
         """Disconnect from Gemini."""
@@ -2563,6 +2831,19 @@ async def websocket_endpoint(websocket: WebSocket, call_session_id: int):
             except Exception as appointment_error:
                 logger.error(f"Error processing appointment during cleanup: {appointment_error}")
                 print(f"❌ Appointment processing failed: {appointment_error}")
+        
+        # Process pending customer before cleanup
+        if hasattr(connection, 'pending_customer_data') and connection.pending_customer_data:
+            try:
+                print(f"👤 Processing customer before call cleanup...")
+                customer_phone = await connection.process_pending_customer()
+                if customer_phone:
+                    print(f"✅ Customer processed successfully: {customer_phone}")
+                else:
+                    print(f"⚠️ Customer processing completed but no phone number returned")
+            except Exception as customer_error:
+                logger.error(f"Error processing customer during cleanup: {customer_error}")
+                print(f"❌ Customer processing failed: {customer_error}")
         
         # Cleanup
         await connection.disconnect()
