@@ -59,7 +59,7 @@
           <p>{{ item }}</p>
         </div>
       </v-card-text>
-      <v-card-actions class="pa-2">
+      <!-- <v-card-actions class="pa-2">
         <v-btn
           text
           color="primary"
@@ -67,7 +67,7 @@
           @click="fullTranscript"
           >View full transcript >
         </v-btn>
-      </v-card-actions>
+      </v-card-actions> -->
     </v-card>
 
     <!-- Suggestions -->
@@ -91,7 +91,7 @@
           <p>{{ item }}</p>
         </div>
       </v-card-text>
-      <v-card-actions class="pa-2">
+      <!-- <v-card-actions class="pa-2">
         <v-btn
           text
           color="primary"
@@ -99,7 +99,7 @@
           @click="fullTranscript"
           >View full transcript >
         </v-btn>
-      </v-card-actions>
+      </v-card-actions> -->
     </v-card>
   </div>
 

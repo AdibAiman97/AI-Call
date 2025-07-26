@@ -66,7 +66,7 @@
                   No summary available
                 </div>
               </v-card-text>
-              <v-card-actions class="pa-2 flex-shrink-0">
+              <!-- <v-card-actions class="pa-2 flex-shrink-0">
                 <v-btn
                   text
                   color="primary"
@@ -74,7 +74,7 @@
                   @click="viewFullTranscript"
                   >View Full Transcript >
                 </v-btn>
-              </v-card-actions>
+              </v-card-actions> -->
             </v-card>
 
             <!-- Customer Card -->
@@ -82,9 +82,9 @@
               <v-card-title class="text-h6 flex-shrink-0"
                 >Customer Details</v-card-title
               >
-              <v-card-text class="flex-grow-1 d-flex flex-column">
+              <v-card-text class="flex-grow-1 d-flex flex-column justify-center pb-0">
                 <div
-                  class="d-flex align-center mb-4"
+                  class="d-flex align-center"
                   v-if="!loading && customerData"
                 >
                   <v-avatar
@@ -108,44 +108,42 @@
                       <v-icon small class="mr-2">mdi-phone</v-icon>
                       {{ customerData.phone_number }}
                     </p>
-                    <p class="mb-1 text-foreground">
+                    <!-- <p class="mb-1 text-foreground">
                       <v-icon small class="mr-2">mdi-cash</v-icon>
                       Budget: RM{{ customerData.budget?.toLocaleString() }}
-                    </p>
-                    <p class="mb-1 text-foreground">
+                    </p> -->
+                    <!-- <p class="mb-1 text-foreground">
                       <v-icon small class="mr-2">mdi-map-marker</v-icon>
                       {{ customerData.preferred_location }}
                     </p>
                     <p class="mb-1 text-foreground text-caption">
                       <v-icon small class="mr-2">mdi-target</v-icon>
                       {{ customerData.purchase_purpose }}
-                    </p>
+                    </p> -->
                   </div>
                 </div>
-                <div v-else-if="loading" class="text-center pa-4 flex-grow-1">
+                <div v-else-if="loading" class="text-center pa-4">
                   <v-progress-circular
                     indeterminate
                     size="24"
                   ></v-progress-circular>
                   <p class="mt-2">Loading customer info...</p>
                 </div>
-                <div v-else-if="customerError" class="text-center pa-4 text-error flex-grow-1">
+                <div v-else-if="customerError" class="text-center pa-4 text-error">
                   <p>{{ customerError }}</p>
                 </div>
-
-                <!-- Spacer to push button to bottom -->
-                <div class="flex-grow-1"></div>
-
+              </v-card-text>
+              
+              <!-- Bottom button section -->
+              <v-card-actions class="pa-4">
                 <v-btn
-                  text
-                  color="primary"
-                  class="text-capitalize text-background"
+                  class="bg-primary text-background text-capitalize"
                   style="width: 100%"
                   @click="viewCustomerProfile"
                 >
                   View Full Profile
                 </v-btn>
-              </v-card-text>
+              </v-card-actions>
             </v-card>
           </div>
 
@@ -217,7 +215,7 @@
                     No suggestions available
                   </div>
                 </v-card-text>
-                <v-card-actions class="pa-2 flex-shrink-0">
+                <!-- <v-card-actions class="pa-2 flex-shrink-0">
                   <v-btn
                     text
                     color="primary"
@@ -225,7 +223,7 @@
                     @click="viewFullTranscript"
                     >View full transcript >
                   </v-btn>
-                </v-card-actions>
+                </v-card-actions> -->
               </v-card>
             </div>
 

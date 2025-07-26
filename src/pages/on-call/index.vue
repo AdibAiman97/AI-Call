@@ -1,73 +1,73 @@
 <template>
-  <div class="d-flex fill-height ga-2 w-100">
-    <div
-      class="d-flex flex-column align-center justify-center fill-height ga-6 w-100"
-    >
-      <!-- <div class="d-flex flex-column align-center justify-center">
-        <v-avatar size="120" class="bg-primary">
-          <span class="text-h3 text-background font-weight-bold">AI</span>
-        </v-avatar>
-      </div> -->
-
-      <div class="d-flex flex-column align-center justify-center">
-        <!-- DANCING BLOB -->
-        <div class="dancing-blob-container">
-          <TresCanvas :alpha="true">
-            <Suspense>
-              <DancingBlob
-                :analyser="analyser"
-                :dataArray="dataArray"
-                :isAudioPlaying="callStore.isPlayingAudio"
-              />
-            </Suspense>
-          </TresCanvas>
-        </div>
-        <h1 class="d-flex align-center justify-center pt-2">
-          {{
-            callStore.status === "connecting"
-              ? "Connecting to AI Agent..."
-              : "AI Agent"
-          }}
-        </h1>
-        <div
-          v-if="callStore.status === 'connecting'"
-          class="connecting-indicator"
-        >
-          <div class="connecting-dots">
-            <div class="dot"></div>
-            <div class="dot"></div>
-            <div class="dot"></div>
+  <div class="on-call-container">
+    <!-- Main call interface -->
+    <div class="main-call-area">
+      <div class="d-flex flex-column align-center justify-center ga-6">
+        <div class="d-flex flex-column align-center justify-center">
+          <!-- DANCING BLOB -->
+          <div class="dancing-blob-container">
+            <TresCanvas :alpha="true">
+              <Suspense>
+                <DancingBlob
+                  :analyser="analyser"
+                  :dataArray="dataArray"
+                  :isAudioPlaying="callStore.isPlayingAudio"
+                />
+              </Suspense>
+            </TresCanvas>
+          </div>
+          <h1 class="d-flex align-center justify-center pt-2">
+            {{
+              callStore.status === "connecting"
+                ? "Connecting to AI Agent..."
+                : "Gina AI Agent"
+            }}
+          </h1>
+          <div
+            v-if="callStore.status === 'connecting'"
+            class="connecting-indicator"
+          >
+            <div class="connecting-dots">
+              <div class="dot"></div>
+              <div class="dot"></div>
+              <div class="dot"></div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="mb-4">
-        <h1 class="d-flex align-center justify-center">{{ displayTime }}</h1>
-        <p>Call Duration</p>
-      </div>
+        <div class="mb-4">
+          <h1 class="d-flex align-center justify-center">{{ displayTime }}</h1>
+          <p>Call Duration</p>
+        </div>
 
-      <div class="d-flex align-center justify-center ga-8">
-        <v-btn class="bg-foreground" size="70" rounded="circle">
-          <v-icon>
-            <Volume2 />
-          </v-icon>
-        </v-btn>
+        <div class="d-flex align-center justify-center ga-8">
+          <v-btn class="bg-foreground" size="70" rounded="circle">
+            <v-icon>
+              <Volume2 />
+            </v-icon>
+          </v-btn>
 
-        <v-btn
-          @click="endCall"
-          to="/call-summary"
-          class="bg-error"
-          size="70"
-          rounded="circle"
-          :loading="isEnding"
-        >
-          <v-icon color="white">
-            <Phone />
-          </v-icon>
-        </v-btn>
+          <v-btn
+            @click="endCall"
+            to="/call-summary"
+            class="bg-error"
+            size="70"
+            rounded="circle"
+            :loading="isEnding"
+          >
+            <v-icon color="white">
+              <Phone />
+            </v-icon>
+          </v-btn>
+        </div>
       </div>
     </div>
-    <Chat />
+    
+    <!-- Integrated chat panel -->
+    <div class="chat-section">
+      <Chat />
+    </div>
+    
     <!-- Hidden audio processing component -->
     <GeminiLive ref="geminiLiveRef" />
   </div>
@@ -175,6 +175,33 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.on-call-container {
+  display: flex;
+  height: calc(100vh - 64px); /* Account for header height */
+  width: 100%;
+  background-color: rgb(var(--v-theme-background));
+}
+
+.main-call-area {
+  flex: 1;
+  display: flex;
+  align-items: start;
+  justify-content: center;
+  padding: 68px 20px;
+  background-color: rgb(var(--v-theme-background));
+}
+
+.chat-section {
+  width: 400px;
+  min-width: 400px;
+  height: 100%;
+  border-left: 2px solid rgb(var(--v-theme-surface));
+  background-color: rgb(var(--v-theme-surface));
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
 .dancing-blob-container {
   height: 400px;
   width: 500px;
@@ -230,6 +257,57 @@ onUnmounted(() => {
   40% {
     transform: scale(1);
     opacity: 1;
+  }
+}
+
+/* Responsive design */
+@media (max-width: 1024px) {
+  .chat-section {
+    width: 350px;
+    min-width: 350px;
+  }
+  
+  .dancing-blob-container {
+    height: 350px;
+    width: 400px;
+  }
+}
+
+@media (max-width: 768px) {
+  .on-call-container {
+    flex-direction: column;
+    height: auto;
+    min-height: calc(100vh - 64px);
+  }
+  
+  .main-call-area {
+    flex: none;
+    min-height: 60vh;
+    padding: 20px;
+  }
+  
+  .chat-section {
+    width: 100%;
+    min-width: auto;
+    height: 40vh;
+    border-left: none;
+    border-top: 2px solid rgb(var(--v-theme-surface));
+  }
+  
+  .dancing-blob-container {
+    height: 300px;
+    width: 350px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dancing-blob-container {
+    height: 250px;
+    width: 300px;
+  }
+  
+  .main-call-area {
+    padding: 15px;
   }
 }
 </style>
