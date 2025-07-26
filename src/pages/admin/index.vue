@@ -4,28 +4,8 @@
     <div class="d-flex justify-space-between align-center mb-2">
       <h1>{{ pageTitle }}</h1>
 
-      <!-- Call Summary Tab Buttons -->
-      <div v-if="tab === 'sum'" class="d-flex ga-3">
-        <v-btn 
-          class="text-capitalize text-foreground"
-          @click="refreshData"
-          :loading="loading"
-        >
-          <v-icon class="mr-2">mdi-refresh</v-icon>
-          Refresh
-        </v-btn>
-        <v-btn 
-          class="bg-primary text-background text-capitalize"
-          @click="updateCallSession"
-          :loading="updating"
-        >
-          <v-icon class="mr-2">mdi-content-save</v-icon>
-          Update Data
-        </v-btn>
-      </div>
-
       <!-- Appointment Tab Buttons -->
-      <div v-else-if="tab === 'app'" class="d-flex ga-3">
+      <div v-if="tab === 'app'" class="d-flex ga-3">
         <v-btn class="text-capitalize text-foreground">
           <ListFilter :size="20" class="mr-2" />
           Filter
@@ -482,9 +462,21 @@ const fetchCallSessionData = async (sessionId = null) => {
     callSessionData.value = response.data;
     console.log("📊 Admin - Call session data received:", response.data);
     
-    // Fetch customer data using cust_id from call session
-    if (response.data.cust_id) {
+    // Fetch customer data using cust_id from call session  
+    if (response.data.cust_id && response.data.cust_id !== "anonymous") {
       await fetchCustomerData(response.data.cust_id);
+    } else {
+      // Handle anonymous or invalid customer ID
+      console.log("👤 Admin - Customer ID is anonymous or invalid, using fallback data");
+      customerData.value = {
+        first_name: "Anonymous",
+        last_name: "Customer",
+        email: "No email available", 
+        phone_number: response.data.cust_id || "Unknown",
+        budget: 0,
+        preferred_location: "Not specified",
+        purchase_purpose: "Not specified"
+      };
     }
     
   } catch (err) {
@@ -541,8 +533,20 @@ const fetchLatestCallSession = async () => {
       callStore.callSessionId = latestSession.id;
       
       // Fetch customer data for the latest session
-      if (latestSession.cust_id) {
+      if (latestSession.cust_id && latestSession.cust_id !== "anonymous") {
         await fetchCustomerData(latestSession.cust_id);
+      } else {
+        // Handle anonymous customer ID
+        console.log("👤 Admin - Latest session has anonymous customer ID, using fallback data");
+        customerData.value = {
+          first_name: "Anonymous",
+          last_name: "Customer",
+          email: "No email available",
+          phone_number: latestSession.cust_id || "Unknown",
+          budget: 0,
+          preferred_location: "Not specified",
+          purchase_purpose: "Not specified"
+        };
       }
     } else {
       console.log("📊 Admin - No call sessions found, using demo data");
