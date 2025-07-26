@@ -971,12 +971,13 @@ class GeminiLiveConnection:
                             - To save the booking details during the call
                             
                             🚨 MUST CALL store_customer_details() FOR:
-                            - As soon as customer provides their name (even first name only)
-                            - When customer mentions their phone number or contact details
-                            - When customer discusses budget, investment amount, or price range
-                            - When customer talks about property preferences or requirements
-                            - ANY time you get customer information, even if partial or incomplete
-                            - Update the stored details if you get additional customer information later
+                            - When the CUSTOMER (not you) provides their name or introduces themselves
+                            - When the CUSTOMER mentions their phone number or contact details  
+                            - When the CUSTOMER discusses their budget, investment amount, or price range
+                            - When the CUSTOMER talks about their property preferences or requirements
+                            - ANY time you get CUSTOMER information, even if partial or incomplete
+                            - Update the stored details if you get additional CUSTOMER information later
+                            - NEVER call this function for your own introduction as Gina
 
                             CRITICAL ANTI-HALLUCINATION RULES:
                             - You can ONLY use information returned by function calls
