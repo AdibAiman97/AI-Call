@@ -37,6 +37,8 @@ from services.call_session import CallSessionService
 from database.schemas import CallSessionBase
 from services.transcript_crud import create_session_message
 from services.appointment_crud import AppointmentCRUD
+from datetime import datetime, timedelta
+import re
 
 # Setup logging to both console and file
 logging.basicConfig(
@@ -190,6 +192,119 @@ def save_audio_to_file(audio_data: bytes, config: AudioConfig, filename: str):
 # Store active connections
 active_connections = {}
 
+def parse_appointment_string(appointment_str: str, call_session_id: int) -> dict:
+    """
+    Parse appointment string into database-compatible format.
+    
+    Expected format: "Customer: [Name], Phone: [Number], Date: [Date], Time: [Time], Purpose: [Purpose], Notes: [Notes]"
+    Returns dict compatible with AppointmentCRUD.create_appointment()
+    """
+    try:
+        # Initialize default values
+        appointment_data = {
+            "call_session_id": call_session_id,
+            "title": "Property Appointment",
+            "start_time": None,
+            "end_time": None
+        }
+        
+        # Parse customer name
+        customer_match = re.search(r'Customer:\s*([^,]+)', appointment_str, re.IGNORECASE)
+        customer_name = customer_match.group(1).strip() if customer_match else "Unknown Customer"
+        
+        # Parse phone number
+        phone_match = re.search(r'Phone:\s*([^,]+)', appointment_str, re.IGNORECASE)
+        phone_number = phone_match.group(1).strip() if phone_match else ""
+        
+        # Parse date
+        date_match = re.search(r'Date:\s*([^,]+)', appointment_str, re.IGNORECASE)
+        date_str = date_match.group(1).strip() if date_match else ""
+        
+        # Parse time
+        time_match = re.search(r'Time:\s*([^,]+)', appointment_str, re.IGNORECASE)
+        time_str = time_match.group(1).strip() if time_match else ""
+        
+        # Parse purpose
+        purpose_match = re.search(r'Purpose:\s*([^,]+)', appointment_str, re.IGNORECASE)
+        purpose = purpose_match.group(1).strip() if purpose_match else "Property viewing"
+        
+        # Parse notes
+        notes_match = re.search(r'Notes:\s*(.+)', appointment_str, re.IGNORECASE)
+        notes = notes_match.group(1).strip() if notes_match else ""
+        
+        # Create title
+        appointment_data["title"] = f"{purpose} - {customer_name}"
+        if phone_number:
+            appointment_data["title"] += f" ({phone_number})"
+        if notes:
+            appointment_data["title"] += f" - {notes[:50]}"
+        
+        # Parse and convert date/time
+        if date_str and time_str:
+            # Try to parse different date formats
+            date_formats = [
+                "%Y-%m-%d",    # 2025-01-30
+                "%m/%d/%Y",    # 01/30/2025
+                "%d/%m/%Y",    # 30/01/2025
+                "%B %d, %Y",   # January 30, 2025
+                "%b %d, %Y",   # Jan 30, 2025
+            ]
+            
+            parsed_date = None
+            for date_format in date_formats:
+                try:
+                    parsed_date = datetime.strptime(date_str, date_format).date()
+                    break
+                except ValueError:
+                    continue
+            
+            if not parsed_date:
+                # Default to tomorrow if parsing fails
+                parsed_date = (datetime.now() + timedelta(days=1)).date()
+                print(f"⚠️ Could not parse date '{date_str}', defaulting to tomorrow")
+            
+            # Parse time
+            time_formats = [
+                "%H:%M",       # 14:00
+                "%I:%M %p",    # 2:00 PM
+                "%I %p",       # 2 PM
+                "%H:%M:%S",    # 14:00:00
+            ]
+            
+            parsed_time = None
+            for time_format in time_formats:
+                try:
+                    parsed_time = datetime.strptime(time_str, time_format).time()
+                    break
+                except ValueError:
+                    continue
+            
+            if not parsed_time:
+                # Default to 10:00 AM if parsing fails
+                parsed_time = datetime.strptime("10:00", "%H:%M").time()
+                print(f"⚠️ Could not parse time '{time_str}', defaulting to 10:00 AM")
+            
+            # Combine date and time
+            appointment_data["start_time"] = datetime.combine(parsed_date, parsed_time)
+            
+            # Set end time (1 hour later by default)
+            appointment_data["end_time"] = appointment_data["start_time"] + timedelta(hours=1)
+            
+        else:
+            # Default to tomorrow at 10:00 AM if no date/time provided
+            tomorrow = datetime.now() + timedelta(days=1)
+            appointment_data["start_time"] = tomorrow.replace(hour=10, minute=0, second=0, microsecond=0)
+            appointment_data["end_time"] = appointment_data["start_time"] + timedelta(hours=1)
+            print(f"⚠️ No date/time provided, defaulting to tomorrow 10:00 AM")
+        
+        print(f"📝 Parsed appointment: {customer_name} on {appointment_data['start_time']} - {appointment_data['title']}")
+        return appointment_data
+        
+    except Exception as e:
+        print(f"❌ Error parsing appointment string: {e}")
+        print(f"❌ Original string: {appointment_str}")
+        raise e
+
 class GeminiLiveConnection:
     """Manages connection to Gemini Live API for a WebSocket client."""
     
@@ -212,6 +327,7 @@ class GeminiLiveConnection:
         self.call_session_id = call_session_id  # Store call session ID for database operations
         self._processing_response = False  # Flag to prevent duplicate processing
         self._initial_greeting_sent = False  # Flag to prevent duplicate initial greeting
+        self.pending_appointment_data = ""  # Store appointment details during call session
         
     async def connect_to_gemini(self):
         """Connect to Gemini Live API."""
@@ -270,6 +386,39 @@ class GeminiLiveConnection:
                     "type": "object",
                     "properties": {},
                     "required": []
+                }
+            }
+            
+            # Define appointment storage function for Gemini to call
+            store_appointment_function_declaration = {
+                "name": "store_appointment_details",
+                "description": """
+                Use this function to store confirmed appointment details during the call.
+                
+                WHEN TO CALL:
+                1. When customer has confirmed they want to book an appointment
+                2. After you have gathered customer name, phone number, and preferred date/time
+                3. When customer says "yes" to booking confirmation
+                4. Before telling customer "your appointment is confirmed"
+                
+                Store all appointment information in one complete string including:
+                - Customer full name
+                - Customer phone number  
+                - Appointment date and time
+                - Purpose/type of appointment (property viewing, consultation, etc.)
+                - Any special notes or requests
+                
+                This stores the data temporarily during the call for processing after the call ends.
+                """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "appointment_details": {
+                            "type": "string",
+                            "description": "Complete appointment information in format: 'Customer: [Name], Phone: [Number], Date: [Date], Time: [Time], Purpose: [Property viewing/consultation], Notes: [Any additional info]'"
+                        }
+                    },
+                    "required": ["appointment_details"]
                 }
             }
             
@@ -335,6 +484,7 @@ class GeminiLiveConnection:
                             - Answer questions about townships, property details, pricing, and amenities
                             - Use the search_knowledge_base function to get specific property information
                             - Use the get_current_appointments function to check available time slots
+                            - Use the store_appointment_details function to save confirmed bookings
                             - Guide customers through the appointment booking process
 
                             CONVERSATION FLOW:
@@ -343,10 +493,12 @@ class GeminiLiveConnection:
                             3. Guide them toward booking an appointment after providing the requested information
 
                             APPOINTMENT BOOKING PROCESS:
-                            When customers show interest, gather:
-                            1. Their full name
-                            2. Preferred appointment time
-                            3. Contact phone number
+                            When customers show interest in booking:
+                            1. Call get_current_appointments() to check availability
+                            2. Gather customer details: full name, phone number, preferred date/time
+                            3. When customer confirms booking, immediately call store_appointment_details() with format:
+                               "Customer: [Full Name], Phone: [Phone Number], Date: [Date], Time: [Time], Purpose: [Property viewing/consultation], Notes: [Any special requests]"
+                            4. Confirm to customer that their appointment is booked
 
                             MANDATORY FUNCTION CALLING RULES:
                             🚨 MUST CALL search_knowledge_base() FOR:
@@ -363,6 +515,12 @@ class GeminiLiveConnection:
                             - ANY mention of "appointment", "schedule", "book", "available", "when"
                             - ANY questions about time slots or availability
                             - ANY interest in viewing or meeting
+                            
+                            🚨 MUST CALL store_appointment_details() FOR:
+                            - When customer confirms they want to book an appointment
+                            - After gathering customer name, phone, date, and time
+                            - Before telling customer "your appointment is confirmed"
+                            - To save the booking details during the call
 
                             CRITICAL ANTI-HALLUCINATION RULES:
                             - You can ONLY use information returned by function calls
@@ -379,10 +537,10 @@ class GeminiLiveConnection:
             # Add tools
             setup_message["setup"]["tools"] = [
                 {
-                    "function_declarations": [rag_function_declaration, appointment_function_declaration]
+                    "function_declarations": [rag_function_declaration, appointment_function_declaration, store_appointment_function_declaration]
                 }
             ]
-            print(f"📤 Sending setup to Gemini ({GEMINI_MODEL}) with RAG and appointment functions")
+            print(f"📤 Sending setup to Gemini ({GEMINI_MODEL}) with RAG, appointment retrieval, and appointment storage functions")
             
             await self.gemini_ws.send(json.dumps(setup_message))
             
@@ -1027,6 +1185,50 @@ class GeminiLiveConnection:
                     await self.gemini_ws.send(json.dumps(function_response))
                     print(f"✅ Appointment function response sent")
                     
+                elif function_name == 'store_appointment_details':
+                    # Store appointment details temporarily during call session
+                    appointment_details = function_args.get('appointment_details', '')
+                    print(f"📝 Storing appointment details during call session")
+                    
+                    if appointment_details.strip():
+                        # Store the appointment data in the session
+                        self.pending_appointment_data = appointment_details.strip()
+                        
+                        print(f"📝 Appointment stored: {appointment_details}")
+                        
+                        result_text = f"Appointment details have been successfully recorded for this call session. The appointment will be processed when the call ends."
+                        
+                        # Send confirmation to Gemini
+                        function_response = {
+                            "tool_response": {
+                                "function_responses": [{
+                                    "id": function_id,
+                                    "name": function_name,
+                                    "response": {"result": {"string_value": result_text}}
+                                }]
+                            }
+                        }
+                        
+                        print(f"📤 Sending appointment storage confirmation to Gemini")
+                        await self.gemini_ws.send(json.dumps(function_response))
+                        print(f"✅ Appointment storage confirmation sent")
+                        
+                    else:
+                        result_text = "No appointment details provided. Please provide complete appointment information."
+                        
+                        function_response = {
+                            "tool_response": {
+                                "function_responses": [{
+                                    "id": function_id,
+                                    "name": function_name,
+                                    "response": {"result": {"string_value": result_text}}
+                                }]
+                            }
+                        }
+                        
+                        print(f"⚠️ Empty appointment details provided")
+                        await self.gemini_ws.send(json.dumps(function_response))
+                    
                 else:
                     print(f"❓ Unknown function: {function_name}")
                     
@@ -1303,6 +1505,48 @@ class GeminiLiveConnection:
                 logger.error(f"Error sending text to Gemini: {e}")
                 print(f"❌ Text send error: {e}")
     
+    async def process_pending_appointment(self):
+        """Process and save pending appointment data to database when call ends."""
+        if not self.pending_appointment_data:
+            print("📝 No pending appointment data to process")
+            return
+            
+        try:
+            print(f"📝 Processing pending appointment for call session {self.call_session_id}")
+            print(f"📝 Appointment data: {self.pending_appointment_data}")
+            
+            # Parse the appointment string
+            appointment_data = parse_appointment_string(self.pending_appointment_data, self.call_session_id)
+            
+            # Get database session
+            db = next(get_db())
+            
+            try:
+                # Create appointment in database
+                created_appointment = AppointmentCRUD.create_appointment(db, appointment_data)
+                
+                print(f"✅ Appointment successfully created in database:")
+                print(f"   ID: {created_appointment.id}")
+                print(f"   Title: {created_appointment.title}")
+                print(f"   Start: {created_appointment.start_time}")
+                print(f"   End: {created_appointment.end_time}")
+                print(f"   Call Session ID: {created_appointment.call_session_id}")
+                
+                # Clear the pending data after successful save
+                self.pending_appointment_data = ""
+                
+            except Exception as db_error:
+                print(f"❌ Database error creating appointment: {db_error}")
+                logger.error(f"Failed to create appointment in database: {db_error}")
+                raise db_error
+            finally:
+                db.close()
+                
+        except Exception as e:
+            print(f"❌ Error processing pending appointment: {e}")
+            logger.error(f"Error processing pending appointment for call {self.call_session_id}: {e}")
+            # Don't re-raise - we want call cleanup to continue even if appointment fails
+
     async def disconnect(self):
         """Disconnect from Gemini."""
         self.is_connected = False
@@ -1368,6 +1612,15 @@ async def websocket_endpoint(websocket: WebSocket, call_session_id: int):
         logger.error(f"WebSocket error: {e}")
         
     finally:
+        # Process pending appointment before cleanup
+        if hasattr(connection, 'pending_appointment_data') and connection.pending_appointment_data:
+            try:
+                print(f"📝 Processing appointment before call cleanup...")
+                await connection.process_pending_appointment()
+            except Exception as appointment_error:
+                logger.error(f"Error processing appointment during cleanup: {appointment_error}")
+                print(f"❌ Appointment processing failed: {appointment_error}")
+        
         # Cleanup
         await connection.disconnect()
         if websocket in active_connections:
