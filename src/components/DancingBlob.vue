@@ -106,7 +106,7 @@ const uniforms = ref({
   },
   u_time: { type: "f", value: 0.0 },
   u_frequency: { type: "f", value: 0.0 },
-  u_amplitude: { type: "f", value: 0.5 },
+  u_amplitude: { type: "f", value: 0.45 },
   u_primaryColor: { type: "v3", value: selectedColor.value },
 });
 
