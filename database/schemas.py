@@ -64,7 +64,7 @@ class TranscriptResponse(BaseModel):
 class CallSessionBase(BaseModel):
     cust_id: str
     start_time: Optional[datetime] = None
-    end_time: Optional[str] = None
+    end_time: Optional[datetime] = None
     duration_secs: Optional[int] = None
     positive: Optional[int] = None
     neutral: Optional[int] = None
@@ -74,12 +74,15 @@ class CallSessionBase(BaseModel):
     customer_suggestions: Optional[str] = None
     admin_suggestions: Optional[str] = None
 
+    class Config:
+        from_attributes = True
+
 
 class CallSessionResponse(BaseModel):
     id: int
     cust_id: str
     start_time: datetime
-    end_time: Optional[str] = None
+    end_time: Optional[datetime] = None
     duration_secs: Optional[int] = None
     positive: Optional[int] = None
     neutral: Optional[int] = None
@@ -96,7 +99,7 @@ class CallSessionResponse(BaseModel):
 class CallSessionUpdate(CallSessionBase):
     cust_id: Optional[str] = None
     start_time: Optional[datetime] = None
-    end_time: Optional[str] = None
+    end_time: Optional[datetime] = None
     duration_secs: Optional[int] = None
     positive: Optional[int] = None
     neutral: Optional[int] = None
