@@ -36,6 +36,7 @@ from database.connection import engine, Base, get_db
 from services.call_session import CallSessionService
 from database.schemas import CallSessionBase
 from services.transcript_crud import create_session_message
+from services.appointment_crud import AppointmentCRUD
 
 # Setup logging to both console and file
 logging.basicConfig(
@@ -255,6 +256,31 @@ class GeminiLiveConnection:
                 }
             }
             
+            # Define appointment retrieval function for Gemini to call
+            appointment_function_declaration = {
+                "name": "get_current_appointments",
+                "description": """
+                Use this function to retrieve current appointment data from the database.
+                
+                WHEN TO CALL:
+                1. When customer asks about available time slots
+                2. When customer wants to schedule an appointment
+                3. When customer asks "when are you available?"
+                4. When customer mentions wanting to book a viewing
+                5. When customer asks about appointment availability
+                
+                This function returns all current appointments so you can determine:
+                - Which time slots are already booked
+                - What times are available for new appointments
+                - Current appointment schedule to avoid conflicts
+                """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            }
+            
             # Send initial setup with audio response modality, transcription, optional VAD, and RAG tool
             setup_message = {
                 "setup": {
@@ -264,10 +290,10 @@ class GeminiLiveConnection:
                         "speech_config": {
                             "voice_config": {"prebuilt_voice_config": {"voice_name": "Kore"}}
                         },
-                        "max_output_tokens": 500,
-                        "temperature": 0.7,
-                        "top_p": 0.95,
-                        "top_k": 3,
+                        # "max_output_tokens": 500,
+                        # "temperature": 0.7,
+                        # "top_p": 0.95,
+                        # "top_k": 3,
                     },
                     "output_audio_transcription": {},
                     "input_audio_transcription": {},
@@ -311,8 +337,9 @@ class GeminiLiveConnection:
                             - Help customers learn about properties at Gamuda Cove
                             - Guide conversations toward scheduling a viewing appointment
                             - Answer questions about townships, property details, pricing, and amenities
-                            - Use the query_property_database function to get specific property information
-                            - Use the schedule_appointment function when customers want to book a viewing
+                            - Use the search_knowledge_base function to get specific property information
+                            - Use the get_current_appointments function to check available time slots
+                            - Guide customers through the appointment booking process
 
                             CONVERSATION FLOW:
                             1. When prompted to greet, provide a warm welcome as Gina from Gamuda Cove sales gallery
@@ -354,10 +381,10 @@ class GeminiLiveConnection:
             # Add tools
             setup_message["setup"]["tools"] = [
                 {
-                    "function_declarations": [rag_function_declaration]
+                    "function_declarations": [rag_function_declaration, appointment_function_declaration]
                 }
             ]
-            print(f"📤 Sending setup to Gemini ({GEMINI_MODEL}) with RAG function")
+            print(f"📤 Sending setup to Gemini ({GEMINI_MODEL}) with RAG and appointment functions")
             
             await self.gemini_ws.send(json.dumps(setup_message))
             
@@ -919,6 +946,64 @@ class GeminiLiveConnection:
                     self.last_rag_result = result_text
                     self.last_rag_query = query
                     print(f"✅ Function response sent")
+                    
+                elif function_name == 'get_current_appointments':
+                    # Execute appointment retrieval
+                    print(f"📅 Retrieving current appointments from database")
+                    
+                    try:
+                        # Get database session
+                        db = next(get_db())
+                        
+                        # Get all appointments using the CRUD function
+                        appointments = AppointmentCRUD.get_all_appointments(db)
+                        
+                        # Format appointments for Gemini
+                        if appointments:
+                            appointment_data = []
+                            for appointment in appointments:
+                                appointment_info = {
+                                    "id": appointment.id,
+                                    "call_session_id": appointment.call_session_id,
+                                    "title": appointment.title,
+                                    "start_time": appointment.start_time.strftime("%Y-%m-%d %H:%M:%S"),
+                                    "end_time": appointment.end_time.strftime("%Y-%m-%d %H:%M:%S"),
+                                    "created_at": appointment.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                                }
+                                appointment_data.append(appointment_info)
+                            
+                            result_text = f"Current appointments in database: {len(appointments)} appointments found. " + \
+                                        "Here are the scheduled appointments: " + \
+                                        "; ".join([
+                                            f"'{apt['title']}' on {apt['start_time']} to {apt['end_time']}"
+                                            for apt in appointment_data
+                                        ])
+                            print(f"📅 Found {len(appointments)} appointments")
+                        else:
+                            result_text = "No appointments currently scheduled in the database. All time slots are available for booking."
+                            print(f"📅 No appointments found")
+                        
+                    except Exception as e:
+                        result_text = f"Error retrieving appointments: {str(e)}"
+                        print(f"❌ Error retrieving appointments: {e}")
+                    finally:
+                        if 'db' in locals():
+                            db.close()
+                    
+                    # Send appointment data as function response
+                    function_response = {
+                        "tool_response": {
+                            "function_responses": [{
+                                "id": function_id,
+                                "name": function_name,
+                                "response": {"result": {"string_value": result_text}}
+                            }]
+                        }
+                    }
+                    
+                    print(f"📤 Sending appointment data to Gemini")
+                    await self.gemini_ws.send(json.dumps(function_response))
+                    print(f"✅ Appointment function response sent")
                     
                 else:
                     print(f"❓ Unknown function: {function_name}")
