@@ -11,6 +11,7 @@ export const useCallStore = defineStore('call', {
     duration: 0,
     messages: [],
     error: undefined,
+    callSessionId: null,
   }),
 
   getters: {
@@ -34,6 +35,12 @@ export const useCallStore = defineStore('call', {
   },
 
   actions: {
+    // Set call session ID
+    setCallSessionId(id: number) {
+      this.callSessionId = id;
+      console.log(`📞 Call session ID set to: ${id}`);
+    },
+
     // Call lifecycle actions
     startCall() {
       this.status = 'connecting'

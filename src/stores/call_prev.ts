@@ -46,6 +46,24 @@ export const useCallStore = defineStore("call", {
   }),
 
   actions: {
+    // Set call session ID
+    setCallSessionId(id: number) {
+      this.callSessionId = id;
+      console.log(`📞 Call session ID set to: ${id}`);
+    },
+
+    // Navigate to call summary with session ID
+    goToCallSummary() {
+      if (this.callSessionId) {
+        // Navigate with session ID as query parameter for backup
+        window.location.href = `/call-summary?sessionId=${this.callSessionId}`;
+      } else {
+        console.error('❌ Cannot navigate to call summary: No session ID available');
+        // Navigate anyway, let the page handle the error
+        window.location.href = '/call-summary';
+      }
+    },
+
     // Start call - sets up WebSocket and audio
     async startCall() {
       try {
@@ -250,11 +268,13 @@ export const useCallStore = defineStore("call", {
       }
 
       try {
+        const sessionId = this.callSessionId || 2; // Fallback to 2 if not set
         const response = await axios.put(
-          `${import.meta.env.VITE_API_BASE_URL}/call_session/2`,
+          `${import.meta.env.VITE_API_BASE_URL}/call_session/${sessionId}`,
           callSessionData
         );
-        this.callSessionId = response.data.id;
+        // Keep the callSessionId as it was already set
+        console.log(`📞 Call session ${sessionId} updated successfully`);
         // console.log('Call session saved successfully:', response.data)
         return response.data;
       } catch (error) {

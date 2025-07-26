@@ -377,7 +377,13 @@ const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
 // Setup WebSocket connection to FastAPI backend
 const setupWebSocket = (): Promise<void> => {
   return new Promise((resolve, reject) => {
-    const wsUrl = `ws://localhost:8000/ws/2`
+    // Set the call session ID to match the WebSocket connection
+    // You can test with different session IDs by changing this value
+    const sessionId = 2 // Change this to test different sessions (1, 2, 3, etc.)
+    callStore.setCallSessionId(sessionId)
+    console.log(`🔧 Using call session ID: ${sessionId}`)
+    
+    const wsUrl = `ws://localhost:8000/ws/${sessionId}`
     console.log("Connecting to FastAPI WebSocket:", wsUrl)
 
     websocket = new WebSocket(wsUrl)

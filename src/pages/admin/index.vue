@@ -298,7 +298,7 @@ const router = useRouter()
 
 useHotkey('b', () => {
   console.log('go to admin page')
-  router.push('/call-summary')
+  router.push({ path: '/call-summary', query: { id: callStore.callSessionId } })
  }, { shift: false, command: true })
 
 useHotkey(
