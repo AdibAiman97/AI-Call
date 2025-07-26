@@ -275,19 +275,21 @@ async def process_call_session_ai(call_session_id: int):
                         from langchain_google_genai import ChatGoogleGenerativeAI
                         keyword_model = ChatGoogleGenerativeAI(model="gemini-2.0-flash", api_key=GOOGLE_API_KEY)
                         
-                        keyword_prompt = f"""Extract 5-8 important keywords from this real estate call summary that admins should note:
+                        keyword_prompt = f"""Extract 3-5 important keywords from this real estate call summary that represent what the CUSTOMER specifically mentioned, expressed interest in, or stated as requirements:
 
-Summary: {summary}
+                        Summary: {summary}
 
-Requirements:
-- Focus on property names, locations, features, customer details
-- Include budget ranges, timeline mentions, specific requirements  
-- Highlight decision factors, concerns, or positive indicators
-- Use phrases like "Mori Pines", "RM500K budget", "urgent timeline"
-- Keep each keyword/phrase under 3 words
-- Separate with commas
+                        Requirements:
+                        - Focus ONLY on customer-mentioned details from the summary
+                        - Include: property types customer wants, budget they stated, locations they prefer
+                        - Include: timeline customer mentioned, specific features they asked about
+                        - Include: customer concerns, decision factors, or preferences they expressed
+                        - Examples: "Mori Pines interested", "RM500K budget", "3-bedroom requirement", "urgent timeline", "investment purpose"
+                        - Keep each keyword/phrase under 3 words
+                        - Separate with commas
+                        - Do NOT include general property info unless customer specifically mentioned it
 
-Important Keywords:"""
+                        Customer Intention Keywords:"""
                         
                         keyword_response = keyword_model.invoke(keyword_prompt)
                         key_words = keyword_response.content.strip()
@@ -2251,26 +2253,39 @@ class GeminiLiveConnection:
             # Get database session
             db = next(get_db())
             phone_number = customer_data["phone_number"]
+            print(f"📞 Raw phone number from parsing: '{phone_number}'")
+            
+            # Normalize phone number for comparison - remove all non-digits
+            normalized_phone = ''.join(filter(str.isdigit, phone_number))
+            print(f"📞 Normalized phone number: '{normalized_phone}'")
             
             try:
-                # Check if customer already exists
-                try:
-                    existing_customer = CustomerCRUD.get_customer_by_phone(db, phone_number)
-                    print(f"👤 Customer already exists: {existing_customer.first_name} {existing_customer.last_name}")
+                # First, try to find customer by normalized phone number
+                all_customers = CustomerCRUD.get_all_customers(db)
+                print(f"📋 Found {len(all_customers)} total customers in database:")
+                
+                existing_customer = None
+                for customer in all_customers:
+                    customer_normalized_phone = ''.join(filter(str.isdigit, customer.phone_number))
+                    print(f"   - {customer.first_name} {customer.last_name}: {customer.phone_number} (normalized: {customer_normalized_phone})")
                     
-                    # Update call session with existing customer's phone number
+                    if customer_normalized_phone == normalized_phone:
+                        existing_customer = customer
+                        print(f"✅ Found matching customer by normalized phone: {customer.first_name} {customer.last_name}")
+                        break
+                
+                if existing_customer:
+                    # Update call session with existing customer's phone number (use original format from DB)
                     call_session_service = CallSessionService(db)
-                    call_session_service.update_call_session_customer_id(self.call_session_id, phone_number)
-                    print(f"✅ Call session {self.call_session_id} updated with existing customer phone: {phone_number}")
+                    call_session_service.update_call_session_customer_id(self.call_session_id, existing_customer.phone_number)
+                    print(f"✅ Call session {self.call_session_id} updated with existing customer phone: {existing_customer.phone_number}")
                     
                     # Clear the pending data
                     self.pending_customer_data = ""
-                    return phone_number
-                    
-                except HTTPException as http_error:
+                    return existing_customer.phone_number
+                else:
                     # Customer doesn't exist, try to create new one
-                    print(f"👤 Customer not found (expected for new customers): {http_error}")
-                    print(f"👤 Creating new customer: {customer_data['first_name']} {customer_data['last_name']}")
+                    print(f"👤 No existing customer found, creating new customer: {customer_data['first_name']} {customer_data['last_name']}")
                     
                     try:
                         created_customer = CustomerCRUD.create_customer(db, customer_data)
@@ -2291,26 +2306,9 @@ class GeminiLiveConnection:
                         return phone_number
                         
                     except HTTPException as create_error:
-                        # Customer creation failed, likely due to duplicate
-                        print(f"⚠️ Customer creation failed (likely duplicate): {create_error}")
-                        
-                        # Try to get the existing customer again and update call session
-                        try:
-                            existing_customer = CustomerCRUD.get_customer_by_phone(db, phone_number)
-                            print(f"👤 Found existing customer after create failure: {existing_customer.first_name} {existing_customer.last_name}")
-                            
-                            # Update call session with existing customer's phone number
-                            call_session_service = CallSessionService(db)
-                            call_session_service.update_call_session_customer_id(self.call_session_id, phone_number)
-                            print(f"✅ Call session {self.call_session_id} updated with existing customer phone: {phone_number}")
-                            
-                            # Clear the pending data
-                            self.pending_customer_data = ""
-                            return phone_number
-                            
-                        except Exception as fallback_error:
-                            print(f"❌ Failed to update call session with existing customer: {fallback_error}")
-                            raise fallback_error
+                        # This shouldn't happen now that we pre-check, but handle it anyway
+                        print(f"❌ Unexpected customer creation failure: {create_error}")
+                        return None
                     
             except Exception as db_error:
                 print(f"❌ Database error processing customer: {db_error}")
