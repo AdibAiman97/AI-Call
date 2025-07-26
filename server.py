@@ -264,7 +264,28 @@ async def process_call_session_ai(call_session_id: int):
             )
             print(f"❌ Error analyzing sentiment: {e}")
 
-        # 4. Update call session with all collected data using the service
+        # 4. Generate admin suggestions/analysis
+        admin_suggestions = None
+        try:
+            logger.info(f"🔧 Generating admin analysis for session {call_session_id}")
+            print(f"🔧 Generating admin analysis for session {call_session_id}")
+            from ai_services.call_suggestion_admin import analyze_call_and_generate_suggestions
+            analysis_result = analyze_call_and_generate_suggestions(call_session_id)
+            if analysis_result.get("success") and analysis_result.get("analysis"):
+                # Extract the admin suggestions from the analysis
+                analysis_data = analysis_result["analysis"]
+                admin_suggestions_list = analysis_data.get("admin_suggestions", [])
+                admin_suggestions = "\n".join([f"• {suggestion}" for suggestion in admin_suggestions_list])
+                print(f"✅ Admin analysis generated: {admin_suggestions[:100]}...")
+            else:
+                print(f"⚠️ Admin analysis failed or incomplete: {analysis_result}")
+        except Exception as e:
+            logger.error(
+                f"❌ Error generating admin analysis for session {call_session_id}: {e}"
+            )
+            print(f"❌ Error generating admin analysis: {e}")
+
+        # 5. Update call session with all collected data using the service
         try:
             logger.info(f"📊 Updating call session {call_session_id} via service")
             print(f"📊 Updating call session {call_session_id} via service")
@@ -322,6 +343,7 @@ async def process_call_session_ai(call_session_id: int):
                     duration_secs=duration_secs,
                     summarized_content=summary,
                     customer_suggestions=customer_suggestions,
+                    admin_suggestions=admin_suggestions,
                     positive=positive_count,
                     neutral=neutral_count,
                     negative=negative_count,
