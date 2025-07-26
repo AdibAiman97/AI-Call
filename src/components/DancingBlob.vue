@@ -50,9 +50,9 @@ onBeforeRender(({ elapsed }) => {
       uniforms.value.u_frequency.value =
         sum > 0 ? sum / props.dataArray?.length : 0;
       
-      // Faster rotation when AI is speaking
-      blobRef.value.rotation.x += 0.02;
-      blobRef.value.rotation.y += 0.01;
+      // Moderate rotation when AI is speaking
+      blobRef.value.rotation.x += 0.01;
+      blobRef.value.rotation.y += 0.008;
     } else {
       // AI is not speaking - gentle rotation and idle state
       uniforms.value.u_frequency.value = 0;
@@ -106,7 +106,7 @@ const uniforms = ref({
   },
   u_time: { type: "f", value: 0.0 },
   u_frequency: { type: "f", value: 0.0 },
-  u_amplitude: { type: "f", value: 1.5 },
+  u_amplitude: { type: "f", value: 0.5 },
   u_primaryColor: { type: "v3", value: selectedColor.value },
 });
 

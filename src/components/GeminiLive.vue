@@ -44,6 +44,11 @@ class ContinuousAudioPlayer {
   private dataArray: Uint8Array | null = null
 
   private nextChunkTime = 0
+  private lastAudioReceived = 0
+  private lastAudioFinished = 0
+  private audioGracePeriod = 800 // ms to wait after last audio FINISHES before stopping dance
+  private gracePeriodCheck: number | null = null
+  private activeAudioSources: Set<AudioBufferSourceNode> = new Set()
 
   constructor(callStore?: any, parentComponent?: any) {
     this.audioContext = new AudioContext({
@@ -73,10 +78,15 @@ class ContinuousAudioPlayer {
   async start() {
     this.isPlaying = true
     this.playbackLoop()
+    this.startGracePeriodCheck()
   }
 
   async stop() {
     this.isPlaying = false
+    if (this.gracePeriodCheck) {
+      clearInterval(this.gracePeriodCheck)
+      this.gracePeriodCheck = null
+    }
     if (this.audioContext) {
       await this.audioContext.close()
       this.audioContext = null
@@ -85,7 +95,14 @@ class ContinuousAudioPlayer {
 
   enqueueAudio(audioData: ArrayBuffer) {
     this.queue.push(audioData)
-    console.log(`🎵 Enqueued audio chunk: ${audioData.byteLength} bytes, queue length: ${this.queue.length}`)
+    this.lastAudioReceived = Date.now() // Track when we last received audio
+    console.log(`🎵 Enqueued audio chunk: ${audioData.byteLength} bytes, queue length: ${this.queue.length}, last received: ${this.lastAudioReceived}`)
+    
+    // Set playing state when we receive audio
+    if (this.callStore) {
+      this.callStore.setPlayingAudio(true)
+      console.log("💃 Started dancing - audio received")
+    }
     
     // Log potential audio queue buildup issues
     if (this.queue.length > 10) {
@@ -100,12 +117,46 @@ class ContinuousAudioPlayer {
       this.nextChunkTime = this.audioContext.currentTime
     }
     
+    // Stop all active audio sources
+    this.activeAudioSources.forEach(source => {
+      try {
+        source.stop()
+      } catch (e) {
+        // Source might already be stopped
+      }
+    })
+    this.activeAudioSources.clear()
+    
     // Stop playing state when queue is cleared
     if (this.callStore) {
       this.callStore.setPlayingAudio(false)
     }
     
-    console.log("Audio queue cleared")
+    // Reset timing
+    this.lastAudioReceived = 0
+    this.lastAudioFinished = 0
+    
+    console.log("Audio queue cleared and all sources stopped")
+  }
+
+  private startGracePeriodCheck() {
+    // Check every 200ms if we should stop dancing state
+    this.gracePeriodCheck = setInterval(() => {
+      const isQueueEmpty = this.queue.length === 0
+      const hasActiveAudio = this.activeAudioSources.size > 0
+      
+      if (isQueueEmpty && !hasActiveAudio && this.callStore) {
+        const timeSinceLastFinished = Date.now() - this.lastAudioFinished
+        console.log(`🕒 Grace period check: queue empty=${isQueueEmpty}, active sources=${this.activeAudioSources.size}, ${timeSinceLastFinished}ms since last finished (threshold: ${this.audioGracePeriod}ms)`)
+        
+        if (timeSinceLastFinished > this.audioGracePeriod) {
+          console.log("🛑 Stopping dancing - grace period exceeded after audio finished")
+          this.callStore.setPlayingAudio(false)
+        }
+      } else if (hasActiveAudio || !isQueueEmpty) {
+        console.log(`💃 Continuing to dance: queue=${this.queue.length}, active=${this.activeAudioSources.size}`)
+      }
+    }, 200)
   }
 
   private async playbackLoop() {
@@ -145,6 +196,9 @@ class ContinuousAudioPlayer {
       const source = this.audioContext.createBufferSource()
       source.buffer = audioBuffer
       
+      // Track this audio source
+      this.activeAudioSources.add(source)
+      
       // Add a low-pass filter to reduce high-frequency noise/buzzing
       const filter = this.audioContext.createBiquadFilter()
       filter.type = 'lowpass'
@@ -169,17 +223,12 @@ class ContinuousAudioPlayer {
       // Start audio at precisely the scheduled time
       source.start(this.nextChunkTime)
       
-      // Set audio playing state when audio starts
-      if (this.callStore) {
-        this.callStore.setPlayingAudio(true)
-      }
-      
       // Handle when audio finishes playing
       source.onended = () => {
-        // Only stop playing state if no more audio is queued
-        if (this.queue.length === 0 && this.callStore) {
-          this.callStore.setPlayingAudio(false)
-        }
+        // Remove from active sources and update last finished time
+        this.activeAudioSources.delete(source)
+        this.lastAudioFinished = Date.now()
+        console.log(`🔊 Audio chunk finished, active sources: ${this.activeAudioSources.size}, queue: ${this.queue.length}`)
       }
       
       // Calculate actual duration and update next chunk time

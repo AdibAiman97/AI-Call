@@ -175,8 +175,8 @@ onUnmounted(() => {
 
 <style scoped>
 .dancing-blob-container {
-  width: 400px;
-  height: 300px;
+  height: 400px;
+  width: 500px;
   display: flex;
   align-items: center;
   justify-content: center;
