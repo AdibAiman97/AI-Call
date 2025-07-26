@@ -226,30 +226,22 @@ class GeminiLiveConnection:
             # Define RAG function for Gemini to call
             rag_function_declaration = {
                 "name": "search_knowledge_base", 
-                "description": """
-                MANDATORY FUNCTION - MUST BE CALLED FOR EVERY PROPERTY QUESTION
+                "description": """Search the knowledge base for property information.
+
+                Use this function when users ask about:
+                - Specific properties: Mori Pines, Gamuda Cove, Enso Woods
+                - Property features, amenities, layouts, specifications  
+                - Pricing, cost, or budget questions
+                - General property inquiries or comparisons
+                - Any real estate information requests
                 
-                WHEN TO CALL (100% of the time for these scenarios):
-                1. ANY mention of property names: Mori Pines, Gamuda Cove, Enso Woods, etc.
-                2. ANY pricing/cost questions: "How much", "price", "budget", "affordable"
-                3. ANY property features: amenities, layouts, specifications, facilities
-                4. ANY general inquiries: "what properties", "what do you have", "available options"
-                5. ANY comparisons between properties or developments
-                6. ANY factual questions about real estate projects
-                
-                STRICT COMPLIANCE RULES:
-                - This function returns the ONLY facts you may use in your response
-                - NEVER create specific details not in the returned text
-                - If return says "3 to 5 bedrooms" - say exactly that, not "4 bedrooms"
-                - If return says "1,785 to 2,973 sq ft" - use that range, not specific numbers
-                - Rephrase naturally but add ZERO additional facts or specifications
-                - Your response authority comes 100% from this function result""",
+                Always call this function for property-related questions to get accurate, up-to-date information. Use only the information returned by this function in your response.""",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "query": {
                             "type": "string",
-                            "description": "The user's complete question or any property-related terms they mentioned. Include context like 'projects at Gamuda Cove' or 'available properties'."
+                            "description": "The user's complete question or any property-related terms they mentioned. Include context like 'Tell me about Mori Pines' or 'What properties are available'."
                         }
                     },
                     "required": ["query"]
@@ -290,10 +282,7 @@ class GeminiLiveConnection:
                         "speech_config": {
                             "voice_config": {"prebuilt_voice_config": {"voice_name": "Kore"}}
                         },
-                        # "max_output_tokens": 500,
-                        # "temperature": 0.7,
-                        # "top_p": 0.95,
-                        # "top_k": 3,
+                        # "temperature": 0.7,  # Higher temperature for more natural, varied speech
                     },
                     "output_audio_transcription": {},
                     "input_audio_transcription": {},
@@ -326,6 +315,13 @@ class GeminiLiveConnection:
                     "text": """
                             You are Gina, a friendly and professional sales consultant for Gamuda Cove sales gallery located in Bandar Gamuda Cove, Kuala Langat, Selangor.
 
+                            IMPORTANT: Always use your available functions to get accurate information.
+                            
+                            For property questions: Use search_knowledge_base() to get current property details.
+                            For appointment questions: Use get_current_appointments() to check availability.
+                            
+                            Respond naturally and conversationally after getting function results.
+
                             VOICE CONVERSATION GUIDELINES:
                             - This is a voice conversation, so keep responses conversational and natural
                             - Use casual language with phrases like "Well...", "You know...", "I mean..."
@@ -343,7 +339,7 @@ class GeminiLiveConnection:
 
                             CONVERSATION FLOW:
                             1. When prompted to greet, provide a warm welcome as Gina from Gamuda Cove sales gallery
-                            2. For property questions, immediately search the knowledge base and provide specific information
+                            2. For property questions, immediately call search_knowledge_base() and provide specific information
                             3. Guide them toward booking an appointment after providing the requested information
 
                             APPOINTMENT BOOKING PROCESS:
@@ -352,28 +348,30 @@ class GeminiLiveConnection:
                             2. Preferred appointment time
                             3. Contact phone number
 
-                            MANDATORY KNOWLEDGE BASE USAGE:
-                            You MUST use the search_knowledge_base function for EVERY property-related query, even if you think you know the answer. This includes:
-                            - ANY mention of specific properties: "Mori Pines", "Gamuda Cove", "Enso Woods", etc.
-                            - ANY pricing, cost, or budget questions
-                            - ANY property features, layouts, amenities, or specifications
+                            MANDATORY FUNCTION CALLING RULES:
+                            🚨 MUST CALL search_knowledge_base() FOR:
+                            - ANY mention of "Mori Pines", "Gamuda Cove", "Enso Woods", or any property name
+                            - ANY words like "property", "development", "project", "township"
+                            - ANY pricing, cost, budget, or "how much" questions
+                            - ANY features, amenities, layouts, specifications questions
                             - ANY comparisons between properties or projects
-                            - ANY general questions about "what properties do you have"
+                            - ANY general questions like "what do you have", "tell me about"
                             - ANY questions about availability, floor plans, or details
-                            - ANY real estate or property-related information requests
+                            - EVERY real estate information request
+
+                            🚨 MUST CALL get_current_appointments() FOR:
+                            - ANY mention of "appointment", "schedule", "book", "available", "when"
+                            - ANY questions about time slots or availability
+                            - ANY interest in viewing or meeting
 
                             CRITICAL ANTI-HALLUCINATION RULES:
-                            - FORBIDDEN: Creating specific details not in function response
-                            - FORBIDDEN: Adding bedroom counts, bathroom counts, lot sizes not provided
-                            - FORBIDDEN: Mixing function data with your knowledge
-                            - MANDATORY: Use ONLY the exact information returned by search_knowledge_base
-                            - MANDATORY: If function says "1,785 sq ft to 2,973 sq ft" - use that range, don't pick specific numbers
-                            - MANDATORY: If function says "3 to 5 bedrooms" - use that range, don't specify exact counts
-                            - Your response must contain ZERO information not explicitly in the function result
-                            - Rephrase function content naturally but change NO facts, add NO details
-                            - If unsure about any detail, don't include it - only use what's explicitly provided
-                            - Convert numbers to words for speech but keep the same values/ranges
-                            - Present as conversational but stick to facts provided
+                            - You can ONLY use information returned by function calls
+                            - FORBIDDEN: Creating any property details not in function response
+                            - FORBIDDEN: Adding bedroom counts, prices, sizes not provided by functions
+                            - MANDATORY: If function says "1,785 to 2,973 sq ft" - use that exact range
+                            - MANDATORY: If function says "3 to 5 bedrooms" - use that exact range
+                            - NEVER mix function data with your own knowledge
+                            - If function returns no data, say "I don't have that information available"
                             """
                 }]
             }
@@ -461,25 +459,49 @@ class GeminiLiveConnection:
                     for part in parts:
                         if 'text' in part:
                             text_content = part['text']
+                            
+                            # Check for property keywords that should trigger function calls
+                            property_keywords = ["mori pines", "gamuda cove", "enso woods", "property", "development", "project", "township", "amenities", "features", "price", "cost", "bedroom", "bathroom", "size", "layout"]
+                            appointment_keywords = ["appointment", "schedule", "book", "available", "when", "viewing", "visit"]
+                            
+                            has_property_keywords = any(keyword in text_content.lower() for keyword in property_keywords)
+                            has_appointment_keywords = any(keyword in text_content.lower() for keyword in appointment_keywords)
+                            
+                            # Check if Gemini is providing info without function call
+                            if has_property_keywords:
+                                print(f"🚨 CRITICAL: GEMINI BYPASSED FUNCTION CALLING!")
+                                print(f"🚨 Text contains property keywords but NO function call made")
+                                print(f"🚨 Response: '{text_content[:100]}...'")
+                                print(f"🚨 Keywords found: {[kw for kw in property_keywords if kw in text_content.lower()]}")
+                                print(f"🚨 GEMINI MUST CALL search_knowledge_base() for ANY property question!")
+                                
+                            if has_appointment_keywords:
+                                print(f"🚨 CRITICAL: GEMINI BYPASSED APPOINTMENT FUNCTION!")
+                                print(f"🚨 Text contains appointment keywords but NO function call made")
+                                print(f"🚨 Response: '{text_content[:100]}...'")
+                                print(f"🚨 Keywords found: {[kw for kw in appointment_keywords if kw in text_content.lower()]}")
+                                print(f"🚨 GEMINI MUST CALL get_current_appointments() for ANY appointment question!")
+                            
+                            # Check for fake "searching" behavior
+                            fake_search_phrases = ["let me search", "i'm checking", "querying", "initiating", "retrieving", "looking up"]
+                            if any(phrase in text_content.lower() for phrase in fake_search_phrases):
+                                print(f"🚨 FAKE SEARCH DETECTED!")
+                                print(f"🚨 Gemini is pretending to search instead of calling functions")
+                                print(f"🚨 Response: '{text_content}'")
+                                print(f"🚨 This is PROHIBITED behavior - functions must be called immediately!")
+                            
                             # Check if Gemini is saying "I don't have information" without calling RAG
                             if any(phrase in text_content.lower() for phrase in ["don't have", "no information", "not sure", "can't help"]):
                                 print(f"⚠️ GEMINI CLAIMS NO INFO WITHOUT RAG CALL: '{text_content}'")
                                 print(f"⚠️ This suggests Gemini didn't call search_knowledge_base function!")
                                 print(f"⚠️ Full message: {json.dumps(msg_data, indent=2)}")
                             
-                            # Check if Gemini is ignoring function results (more serious issue)
-                            if any(phrase in text_content.lower() for phrase in ["don't have", "no information"]) and any(keyword in text_content.lower() for keyword in ["mori pines", "gamuda", "property"]):
-                                print(f"🚨 CRITICAL: GEMINI IGNORING FUNCTION RESULTS!")
-                                print(f"🚨 Gemini claims no info about property topics that should trigger RAG")
-                                print(f"🚨 Response: '{text_content}'")
-                                print(f"🚨 This indicates Gemini is not using function call results properly!")
-                                
-                                # Check if we recently sent RAG results that are being ignored
-                                if hasattr(self, 'last_rag_result') and self.last_rag_result:
-                                    print(f"🚨 RECENT RAG RESULT WAS IGNORED!")
-                                    print(f"🚨 Last RAG query: '{self.last_rag_query}'")
-                                    print(f"🚨 Last RAG result: '{self.last_rag_result[:200]}...'")
-                                    print(f"🚨 Gemini should have used this information but ignored it!")
+                            # Check if we recently sent RAG results that are being ignored
+                            if hasattr(self, 'last_rag_result') and self.last_rag_result:
+                                print(f"🚨 RECENT RAG RESULT WAS IGNORED!")
+                                print(f"🚨 Last RAG query: '{self.last_rag_query}'")
+                                print(f"🚨 Last RAG result: '{self.last_rag_result[:200]}...'")
+                                print(f"🚨 Gemini should have used this information but ignored it!")
                 
                 # Extract transcripts using SDK-like patterns
                 await self._extract_transcripts_sdk_style(msg_data)
