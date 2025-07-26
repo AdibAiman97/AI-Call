@@ -16,5 +16,8 @@ build/
 
 .DS_Store
 
+# markdown
+GEMINI.md
+
 gemini_live.log
 references
