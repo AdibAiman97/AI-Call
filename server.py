@@ -186,77 +186,34 @@ async def process_call_session_ai(call_session_id: int):
             )
             print(f"❌ Error generating customer suggestions: {e}")
 
-        # 3. Analyze sentiment for a sample of transcripts to avoid rate limiting
-        sentiment_results = []
+        # 3. Analyze overall conversation sentiment (more efficient and meaningful)
+        sentiment_breakdown = {"positive": 0, "neutral": 1, "negative": 0}
         try:
-            logger.info(f"😊 Analyzing sentiment for session {call_session_id}")
-            print(f"😊 Analyzing sentiment for session {call_session_id}")
+            logger.info(f"😊 Analyzing overall conversation sentiment for session {call_session_id}")
+            print(f"😊 Analyzing overall conversation sentiment for session {call_session_id}")
+            
+            from ai_services.sentiment_tool import analyze_overall_conversation_sentiment
+            import json
+            
+            # Call the regular function (not LangChain tool) with session_id parameter
+            sentiment_result = analyze_overall_conversation_sentiment(call_session_id)
+            sentiment_data = json.loads(sentiment_result)
+            
+            if sentiment_data.get("success"):
+                overall_sentiment = sentiment_data.get("overall_sentiment", {})
+                sentiment_breakdown = sentiment_data.get("sentiment_breakdown", {"positive": 0, "neutral": 1, "negative": 0})
+                
+                print(f"✅ Overall sentiment: {overall_sentiment.get('sentiment', 'Unknown')} (confidence: {overall_sentiment.get('confidence', 0):.2f})")
+                print(f"📊 Breakdown: Positive: {sentiment_breakdown['positive']}, Neutral: {sentiment_breakdown['neutral']}, Negative: {sentiment_breakdown['negative']}")
+                
+                if "key_drivers" in sentiment_data:
+                    print(f"🔍 Key drivers: {', '.join(sentiment_data['key_drivers'])}")
+            else:
+                logger.warning(f"Overall sentiment analysis failed: {sentiment_data.get('error')}")
+                print(f"⚠️ Sentiment analysis failed, using default neutral sentiment")
 
-            db = SessionLocal()
-            try:
-                transcripts = (
-                    db.query(Transcript)
-                    .filter(Transcript.session_id == call_session_id)
-                    .order_by(Transcript.created_at)
-                    .all()
-                )
-
-                # Limit sentiment analysis to a max of 15 transcripts to avoid rate limits
-                max_sentiment_checks = 15
-                transcripts_to_check = transcripts[:max_sentiment_checks]
-
-                logger.info(
-                    f"🔬 Analyzing {len(transcripts_to_check)} of {len(transcripts)} transcripts for sentiment."
-                )
-                print(
-                    f"🔬 Analyzing {len(transcripts_to_check)} of {len(transcripts)} transcripts for sentiment."
-                )
-
-                for i, transcript in enumerate(transcripts_to_check):
-                    try:
-                        sentiment_result = analyze_sentiment_from_transcript.invoke(
-                            {"transcript_id": transcript.id}
-                        )
-
-                        # Add a small delay to respect rate limits
-                        if i < len(transcripts_to_check) - 1:
-                            await asyncio.sleep(1)  # 1-second delay between calls
-
-                        try:
-                            sentiment_data = json.loads(sentiment_result)
-                            if sentiment_data.get("success"):
-                                sentiment_results.append(sentiment_data)
-                                sentiment_info = sentiment_data.get(
-                                    "sentiment_analysis", {}
-                                )
-                                sentiment = sentiment_info.get("sentiment", "Unknown")
-                                confidence = sentiment_info.get("confidence", 0)
-                                print(
-                                    f"   📊 Transcript {transcript.id}: {sentiment} (confidence: {confidence:.2f})"
-                                )
-                            else:
-                                logger.warning(
-                                    f"Sentiment analysis failed for transcript {transcript.id}: {sentiment_data.get('error')}"
-                                )
-                        except json.JSONDecodeError:
-                            logger.error(
-                                f"Could not decode sentiment JSON for transcript {transcript.id}: {sentiment_result}"
-                            )
-
-                    except Exception as transcript_error:
-                        logger.error(
-                            f"Error analyzing sentiment for transcript {transcript.id}: {transcript_error}"
-                        )
-
-            finally:
-                db.close()
-
-            logger.info(
-                f"✅ Sentiment analysis completed for {len(sentiment_results)} transcripts in session {call_session_id}"
-            )
-            print(
-                f"✅ Sentiment analysis completed for {len(sentiment_results)} transcripts"
-            )
+            logger.info(f"✅ Conversation sentiment analysis completed for session {call_session_id}")
+            print(f"✅ Conversation sentiment analysis completed")
 
         except Exception as e:
             logger.error(
@@ -305,19 +262,10 @@ async def process_call_session_ai(call_session_id: int):
                     duration = end_time - call_session.start_time
                     duration_secs = int(duration.total_seconds())
 
-                positive_count = sum(
-                    1
-                    for r in sentiment_results
-                    if r.get("sentiment_analysis", {}).get("sentiment", "").lower()
-                    == "positive"
-                )
-                negative_count = sum(
-                    1
-                    for r in sentiment_results
-                    if r.get("sentiment_analysis", {}).get("sentiment", "").lower()
-                    == "negative"
-                )
-                neutral_count = len(sentiment_results) - positive_count - negative_count
+                # Use the sentiment breakdown from overall conversation analysis
+                positive_count = sentiment_breakdown.get("positive", 0)
+                negative_count = sentiment_breakdown.get("negative", 0) 
+                neutral_count = sentiment_breakdown.get("neutral", 1)
 
                 key_words = None
                 try:
