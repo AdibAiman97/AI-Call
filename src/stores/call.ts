@@ -11,6 +11,7 @@ export const useCallStore = defineStore('call', {
     duration: 0,
     messages: [],
     error: undefined,
+    callSessionId: null,
   }),
 
   getters: {
@@ -41,6 +42,7 @@ export const useCallStore = defineStore('call', {
       this.duration = 0
       this.messages = []
       this.error = undefined
+      this.callSessionId = null // Clear any previous session
       this._startTimer()
     },
 
@@ -54,6 +56,7 @@ export const useCallStore = defineStore('call', {
       this.isRecording = false
       this.isMuted = false
       this.isPlayingAudio = false
+      // Don't reset callSessionId here - keep it for call summary
       this._stopTimer()
     },
 
@@ -66,6 +69,14 @@ export const useCallStore = defineStore('call', {
 
     setStatus(status: CallStatus) {
       this.status = status
+    },
+
+    setCallSessionId(sessionId: number) {
+      this.callSessionId = sessionId
+    },
+
+    clearCallSession() {
+      this.callSessionId = null
     },
 
     // Audio controls
@@ -137,6 +148,7 @@ export const useCallStore = defineStore('call', {
       this.duration = 0
       this.messages = []
       this.error = undefined
+      this.callSessionId = null
       this._stopTimer()
     },
   },

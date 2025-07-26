@@ -4,7 +4,7 @@
   </div>
 
   <p class="text-foreground pb-2 mb-4" v-if="!loading && callSessionData">
-    {{ callStore.formatTime(callSessionData.duration_secs) }} •
+    {{ formatDuration(callSessionData.duration_secs) }} •
     {{ formatDateTime(callSessionData.start_time) }}
   </p>
   <p class="text-foreground pb-2 mb-4" v-else-if="loading">
@@ -95,7 +95,7 @@ useHotkey('a', () => {
  }, { shift: false, command: true })
  
 import { ref, onMounted } from "vue";
-import { useCallStore } from "../../stores/call_prev";
+import { useCallStore } from "../../stores/call";
 
 const summaryList = ref([]);
 const customerNextSteps = ref([]);
@@ -150,6 +150,18 @@ const formatDateTime = (startTime) => {
     hour12: true,
   };
   return date.toLocaleString("en-US", options);
+};
+
+const formatDuration = (durationSecs) => {
+  if (!durationSecs) return "00:00";
+  const hours = Math.floor(durationSecs / 3600);
+  const minutes = Math.floor((durationSecs % 3600) / 60);
+  const seconds = durationSecs % 60;
+  
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
 onMounted(() => {

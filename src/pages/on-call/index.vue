@@ -117,7 +117,7 @@ const endCall = async () => {
     callStore.endCall();
 
     // Navigate back to landing page
-    await router.push("/");
+    await router.push("/call-summary");
   } catch (error) {
     console.error("Error ending call:", error);
   } finally {
