@@ -7,9 +7,32 @@
     {{ formatDuration(callSessionData.duration_secs) }} •
     {{ formatDateTime(callSessionData.start_time) }}
   </p>
-  <p class="text-foreground pb-2 mb-4" v-else-if="loading">
-    Loading call information...
-  </p>
+  <div v-else-if="loading || isPolling" class="text-foreground pb-2 mb-4">
+    <div class="d-flex align-center ga-3">
+      <v-progress-circular 
+        :size="20" 
+        :width="2" 
+        color="primary" 
+        indeterminate
+      ></v-progress-circular>
+      <span v-if="processingStatus === 'not_started'">
+        Preparing AI analysis...
+      </span>
+      <span v-else-if="processingStatus === 'in_progress'">
+        AI processing in progress... ({{ processingProgress }}%)
+      </span>
+      <span v-else>
+        Loading call information...
+      </span>
+    </div>
+    <v-progress-linear
+      v-if="processingStatus === 'in_progress'"
+      :model-value="processingProgress"
+      color="primary"
+      height="4"
+      class="mt-2"
+    ></v-progress-linear>
+  </div>
 
 
   <!-- Summary Content -->
@@ -21,7 +44,17 @@
       <v-card-text
         class="d-flex flex-column ga-2 text-body-1 text-secForeground"
       >
-        <div v-for="item in summaryList" class="d-flex ga-2">
+        <!-- Show skeleton loading while processing -->
+        <div v-if="(loading || isPolling) && summaryList.length === 0" class="d-flex flex-column ga-2">
+          <v-skeleton-loader
+            v-for="n in 3"
+            :key="n"
+            type="text"
+            class="mb-2"
+          ></v-skeleton-loader>
+        </div>
+        <!-- Show actual content when available -->
+        <div v-else v-for="item in summaryList" class="d-flex ga-2">
           <p>•</p>
           <p>{{ item }}</p>
         </div>
@@ -43,7 +76,17 @@
       <v-card-text
         class="d-flex flex-column ga-2 text-body-1 text-secForeground"
       >
-        <div v-for="item in customerNextSteps" class="d-flex ga-2">
+        <!-- Show skeleton loading while processing -->
+        <div v-if="(loading || isPolling) && customerNextSteps.length === 0" class="d-flex flex-column ga-2">
+          <v-skeleton-loader
+            v-for="n in 3"
+            :key="n"
+            type="text"
+            class="mb-2"
+          ></v-skeleton-loader>
+        </div>
+        <!-- Show actual content when available -->
+        <div v-else v-for="item in customerNextSteps" class="d-flex ga-2">
           <p>•</p>
           <p>{{ item }}</p>
         </div>
@@ -102,6 +145,9 @@ const summaryList = ref([]);
 const customerNextSteps = ref([]);
 const callSessionData = ref(null);
 const loading = ref(true);
+const processingStatus = ref('not_started');
+const processingProgress = ref(0);
+const isPolling = ref(false);
 
 const callStore = useCallStore();
 
@@ -123,14 +169,12 @@ const callStore = useCallStore();
 //   }
 // };
 
-const fetchCallSessionData = async () => {
+const fetchCallSessionData = async (isPolling = false) => {
   try {
-    loading.value = true;
-    
-    console.log('📊 Call Summary - Debug Info:');
-    console.log('  callStore.callSessionId:', callStore.callSessionId);
-    console.log('  typeof callSessionId:', typeof callStore.callSessionId);
-    console.log('  callStore state:', callStore.$state);
+    if (!isPolling) {
+      loading.value = true;
+      console.log('📊 Call Summary - Initial fetch');
+    }
     
     if (!callStore.callSessionId) {
       // Try to get from URL params as fallback  
@@ -152,7 +196,7 @@ const fetchCallSessionData = async () => {
       }
     }
     
-    console.log(`📊 Fetching call session data for ID: ${callStore.callSessionId}`);
+    console.log(`📊 Fetching call session data for ID: ${callStore.callSessionId} (polling: ${isPolling})`);
     
     const response = await fetch(
       `${import.meta.env.VITE_API_BASE_URL}/call_session/${callStore.callSessionId}`
@@ -163,11 +207,37 @@ const fetchCallSessionData = async () => {
     }
     
     const data = await response.json();
-    console.log("📊 Raw call session data received:", data);
+    
+    if (!isPolling) {
+      console.log("📊 Raw call session data received:", data);
+    }
+    
     callSessionData.value = data;
+    
+    // Update processing status
+    processingStatus.value = data.processing_status || 'not_started';
+    processingProgress.value = data.processing_progress || 0;
+    
+    console.log(`📊 Processing status: ${processingStatus.value} (${processingProgress.value}%)`);
+    
+    // Parse and update content only if we have new data
+    parseCallSessionContent(data);
+    
+    // Return the processing status for polling logic
+    return data.processing_status;
+  } catch (error) {
+    console.error("Error fetching call session data:", error);
+    if (!isPolling) {
+      summaryList.value = ["Unable to load call summary. Please try again later."];
+      customerNextSteps.value = ["Please contact support for assistance."];
+    }
+    throw error;
+  }
+};
 
-    // Parse summarized content with detailed logging
-    console.log("📝 Raw summarized_content:", data.summarized_content);
+const parseCallSessionContent = (data) => {
+  // Parse summarized content with detailed logging
+  console.log("📝 Raw summarized_content:", data.summarized_content);
     if (data.summarized_content && data.summarized_content.trim()) {
       const rawSummary = data.summarized_content;
       console.log("📝 Processing summary of length:", rawSummary.length);
@@ -267,16 +337,70 @@ const fetchCallSessionData = async () => {
         ];
       }
     }
-    
-  } catch (error) {
-    console.error("Error fetching call session data:", error);
-    summaryList.value = [
-      "Unable to load call summary. Please try again later.",
-    ];
-    customerNextSteps.value = ["Please contact support for assistance."];
-  } finally {
-    loading.value = false;
-  }
+};
+
+// Smart polling function
+const startPolling = async () => {
+  const maxRetries = 20; // 60 seconds total (20 * 3s)
+  let retries = 0;
+  let pollInterval = null;
+  
+  console.log('📊 Starting intelligent polling for AI processing completion');
+  isPolling.value = true;
+  
+  const poll = async () => {
+    try {
+      if (retries >= maxRetries) {
+        console.log('📊 Polling timeout reached - showing current data');
+        loading.value = false;
+        isPolling.value = false;
+        if (pollInterval) clearTimeout(pollInterval);
+        return;
+      }
+      
+      const status = await fetchCallSessionData(true);
+      retries++;
+      
+      console.log(`📊 Poll ${retries}/${maxRetries}: Status = ${status} (Progress: ${processingProgress.value}%)`);
+      
+      if (status === 'completed') {
+        console.log('📊 AI processing completed!');
+        loading.value = false;
+        isPolling.value = false;
+        if (pollInterval) clearTimeout(pollInterval);
+        return;
+      }
+      
+      // Continue polling every 3 seconds if still in progress
+      if (status === 'in_progress' || status === 'not_started') {
+        pollInterval = setTimeout(poll, 3000);
+      } else {
+        // Unknown status - stop polling
+        console.log(`📊 Unknown status "${status}" - stopping polling`);
+        loading.value = false;
+        isPolling.value = false;
+        if (pollInterval) clearTimeout(pollInterval);
+      }
+      
+    } catch (error) {
+      console.error('📊 Polling error:', error);
+      retries++;
+      
+      // Continue polling even on errors (network issues, etc.)
+      if (retries < maxRetries && isPolling.value) {
+        console.log('📊 Retrying after error...');
+        pollInterval = setTimeout(poll, 3000);
+      } else {
+        console.log('📊 Max retries reached or polling stopped - stopping polling');
+        loading.value = false;
+        isPolling.value = false;
+        if (pollInterval) clearTimeout(pollInterval);
+      }
+    }
+  };
+  
+  // Start the polling
+  poll();
 };
 
 const formatDateTime = (dateTimeString) => {
@@ -320,13 +444,26 @@ const formatDuration = (durationSecs) => {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
-onMounted(() => {
+onMounted(async () => {
   // Debug: Check what's available on the call store
   console.log('🔍 Call store object:', callStore);
   console.log('🔍 Call store methods:', Object.getOwnPropertyNames(callStore));
-  console.log('🔍 formatTime function:', callStore.formatTime);
-  console.log('🔍 typeof formatTime:', typeof callStore.formatTime);
 
-  fetchCallSessionData();
+  try {
+    // Initial fetch to get current data
+    const initialStatus = await fetchCallSessionData(false);
+    
+    // Start polling if processing is not completed
+    if (initialStatus !== 'completed') {
+      console.log('📊 AI processing not complete - starting polling');
+      startPolling();
+    } else {
+      console.log('📊 AI processing already completed');
+      loading.value = false;
+    }
+  } catch (error) {
+    console.error('📊 Error during initial fetch:', error);
+    loading.value = false;
+  }
 });
 </script>

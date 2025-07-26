@@ -5,7 +5,23 @@
       <h1>{{ pageTitle }}</h1>
 
       <!-- Call Summary Tab Buttons -->
-      <div v-if="tab === 'sum'">
+      <div v-if="tab === 'sum'" class="d-flex ga-3">
+        <v-btn 
+          class="text-capitalize text-foreground"
+          @click="refreshData"
+          :loading="loading"
+        >
+          <v-icon class="mr-2">mdi-refresh</v-icon>
+          Refresh
+        </v-btn>
+        <v-btn 
+          class="bg-primary text-background text-capitalize"
+          @click="updateCallSession"
+          :loading="updating"
+        >
+          <v-icon class="mr-2">mdi-content-save</v-icon>
+          Update Data
+        </v-btn>
       </div>
 
       <!-- Appointment Tab Buttons -->
@@ -21,8 +37,8 @@
       </div>
     </div>
     <p class="text-foreground pb-2 mb-4" v-if="tab === 'sum'">
-      <span v-if="!loading && callSessionData">
-        {{ customerInfo.name }} • {{ customerInfo.duration }} •
+      <span v-if="!loading && callSessionData && customerData">
+        {{ customerData.first_name }} {{ customerData.last_name }} • {{ customerInfo.duration }} •
         {{ customerInfo.time }}
       </span>
       <span v-else-if="loading"> Loading call information... </span>
@@ -51,6 +67,7 @@
               </v-card-title>
               <v-card-text
                 class="d-flex flex-column ga-2 text-body-1 text-secForeground flex-grow-1 overflow-y-auto"
+                style="min-height: 200px;"
               >
                 <div v-if="!loading && summaryList.length > 0">
                   <div v-for="item in summaryList" class="d-flex ga-2 mb-2">
@@ -74,7 +91,7 @@
                   text
                   color="primary"
                   class="text-capitalize px-2"
-                  @click=""
+                  @click="viewFullTranscript"
                   >View Full Transcript >
                 </v-btn>
               </v-card-actions>
@@ -83,12 +100,12 @@
             <!-- Customer Card -->
             <v-card class="rounded-lg elevation-2 d-flex flex-column">
               <v-card-title class="text-h6 flex-shrink-0"
-                >Customer</v-card-title
+                >Customer Details</v-card-title
               >
               <v-card-text class="flex-grow-1 d-flex flex-column">
                 <div
                   class="d-flex align-center mb-4"
-                  v-if="!loading && callSessionData"
+                  v-if="!loading && customerData"
                 >
                   <v-avatar
                     size="40"
@@ -96,22 +113,32 @@
                     color="#BFC6C0"
                     rounded="circle"
                   >
-                    {{ getCustomerInitials(customerInfo.name) }}
+                    {{ getCustomerInitials(customerData.first_name + ' ' + customerData.last_name) }}
                   </v-avatar>
-                  <div class="d-flex flex-column ga-3">
+                  <div class="d-flex flex-column ga-2">
                     <p class="font-weight-bold mb-1 text-foreground">
-                      <v-icon small class="mr-2">mdi-account</v-icon
-                      >{{ customerInfo.name }}
+                      <v-icon small class="mr-2">mdi-account</v-icon>
+                      {{ customerData.first_name }} {{ customerData.last_name }}
                     </p>
                     <p class="mb-1 text-foreground">
-                      <v-icon small class="mr-2">mdi-email</v-icon
-                      >{{
-                        customerInfo.name.toLowerCase().replace(" ", ".")
-                      }}@customer.com
+                      <v-icon small class="mr-2">mdi-email</v-icon>
+                      {{ customerData.email }}
                     </p>
                     <p class="mb-1 text-foreground">
-                      <v-icon small class="mr-2">mdi-phone</v-icon>(+60) 12-345
-                      6789
+                      <v-icon small class="mr-2">mdi-phone</v-icon>
+                      {{ customerData.phone_number }}
+                    </p>
+                    <p class="mb-1 text-foreground">
+                      <v-icon small class="mr-2">mdi-cash</v-icon>
+                      Budget: RM{{ customerData.budget?.toLocaleString() }}
+                    </p>
+                    <p class="mb-1 text-foreground">
+                      <v-icon small class="mr-2">mdi-map-marker</v-icon>
+                      {{ customerData.preferred_location }}
+                    </p>
+                    <p class="mb-1 text-foreground text-caption">
+                      <v-icon small class="mr-2">mdi-target</v-icon>
+                      {{ customerData.purchase_purpose }}
                     </p>
                   </div>
                 </div>
@@ -122,6 +149,9 @@
                   ></v-progress-circular>
                   <p class="mt-2">Loading customer info...</p>
                 </div>
+                <div v-else-if="customerError" class="text-center pa-4 text-error flex-grow-1">
+                  <p>{{ customerError }}</p>
+                </div>
 
                 <!-- Spacer to push button to bottom -->
                 <div class="flex-grow-1"></div>
@@ -131,6 +161,7 @@
                   color="primary"
                   class="text-capitalize text-background"
                   style="width: 100%"
+                  @click="viewCustomerProfile"
                 >
                   View Full Profile
                 </v-btn>
@@ -181,7 +212,7 @@
                 style="flex: 1"
               >
                 <v-card-title class="text-h6 text-foreground flex-shrink-0"
-                  >Suggestions</v-card-title
+                  >Admin Suggestions</v-card-title
                 >
                 <v-card-text
                   class="d-flex flex-column ga-2 text-body-1 text-secForeground flex-grow-1 overflow-y-auto"
@@ -211,7 +242,7 @@
                     text
                     color="primary"
                     class="text-capitalize px-2"
-                    @click=""
+                    @click="viewFullTranscript"
                     >View full transcript >
                   </v-btn>
                 </v-card-actions>
@@ -282,24 +313,42 @@
         <Appointment />
       </v-tabs-window-item>
     </v-tabs-window>
+
+    <!-- Success/Error Snackbars -->
+    <v-snackbar
+      v-model="showUpdateSuccess"
+      color="success"
+      timeout="3000"
+    >
+      Call session data updated successfully!
+    </v-snackbar>
+
+    <v-snackbar
+      v-model="showUpdateError"
+      color="error"
+      timeout="5000"
+    >
+      Error updating call session: {{ updateErrorMessage }}
+    </v-snackbar>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from "vue";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 import axios from "axios";
 import { useCallStore } from "@/stores/call_prev";
 import { Plus, ListFilter } from "lucide-vue-next";
 import { useHotkey } from '@/utils/Hotkey'
-const tab = ref("sum");
 
-const router = useRouter()
+const tab = ref("sum");
+const router = useRouter();
+const route = useRoute();
 
 useHotkey('b', () => {
-  console.log('go to admin page')
+  console.log('go to call summary page')
   router.push({ path: '/call-summary', query: { id: callStore.callSessionId } })
- }, { shift: false, command: true })
+}, { shift: false, command: true })
 
 useHotkey(
   "k",
@@ -316,13 +365,20 @@ useHotkey(
   },
   { shift: false, command: true }
 );
+
 const callStore = useCallStore();
 
 // Reactive data properties
 const callSessionData = ref(null);
+const customerData = ref(null);
 const loading = ref(true);
+const updating = ref(false);
 const error = ref(null);
+const customerError = ref(null);
 const selectedKeyword = ref(null);
+const showUpdateSuccess = ref(false);
+const showUpdateError = ref(false);
+const updateErrorMessage = ref("");
 
 // Computed properties for parsed data
 const summaryList = computed(() => {
@@ -365,19 +421,43 @@ const highestSentiment = computed(() => {
 
 const customerInfo = computed(() => {
   if (!callSessionData.value) return { name: "", duration: "", time: "" };
+  
+  // Safely format duration with fallback
+  let duration = "0 min";
+  if (callSessionData.value.duration_secs && typeof callStore.formatTime === 'function') {
+    try {
+      duration = callStore.formatTime(callSessionData.value.duration_secs);
+    } catch (error) {
+      console.warn('Error formatting time:', error);
+      duration = `${callSessionData.value.duration_secs} sec`;
+    }
+  } else if (callSessionData.value.duration_secs) {
+    // Fallback formatting if store method is not available
+    const secs = callSessionData.value.duration_secs;
+    const minutes = Math.floor(secs / 60);
+    const seconds = secs % 60;
+    
+    if (minutes === 0) {
+      duration = `${seconds} second${seconds !== 1 ? "s" : ""}`;
+    } else if (seconds === 0) {
+      duration = `${minutes} minute${minutes !== 1 ? "s" : ""}`;
+    } else {
+      duration = `${minutes} minute${minutes !== 1 ? "s" : ""} ${seconds} second${seconds !== 1 ? "s" : ""}`;
+    }
+  }
+  
   return {
     name: callSessionData.value.cust_id || "Unknown Customer",
-    duration:
-      callStore.formatTime(callSessionData.value.duration_secs) || "0 min",
+    duration: duration,
     time: formatDateTime(callSessionData.value.start_time),
   };
 });
 
 const pageTitle = computed(() => {
-  return tab.value === "sum" ? "Call Summary" : "Appointment";
+  return tab.value === "sum" ? "Admin Dashboard" : "Appointment";
 });
 
-// API function
+// API functions
 const fetchCallSessionData = async (sessionId = null) => {
   try {
     loading.value = true;
@@ -393,10 +473,20 @@ const fetchCallSessionData = async (sessionId = null) => {
       return;
     }
 
+    console.log(`🔍 Admin - Fetching call session data for ID: ${callSessionId}`);
+    
     const response = await axios.get(
       `${import.meta.env.VITE_API_BASE_URL}/call_session/${callSessionId}`
     );
+    
     callSessionData.value = response.data;
+    console.log("📊 Admin - Call session data received:", response.data);
+    
+    // Fetch customer data using cust_id from call session
+    if (response.data.cust_id) {
+      await fetchCustomerData(response.data.cust_id);
+    }
+    
   } catch (err) {
     console.error("Error fetching call session data:", err);
     error.value = err.message;
@@ -405,38 +495,124 @@ const fetchCallSessionData = async (sessionId = null) => {
   }
 };
 
+const fetchCustomerData = async (custId) => {
+  try {
+    customerError.value = null;
+    console.log(`👤 Admin - Fetching customer data for phone: ${custId}`);
+    
+    const response = await axios.get(
+      `${import.meta.env.VITE_API_BASE_URL}/customers/phone/${custId}`
+    );
+    
+    customerData.value = response.data;
+    console.log("👤 Admin - Customer data received:", response.data);
+    
+  } catch (err) {
+    console.error("Error fetching customer data:", err);
+    customerError.value = `Customer details not found for ${custId}`;
+    
+    // Create a fallback customer object for display
+    customerData.value = {
+      first_name: "Unknown",
+      last_name: "Customer",
+      email: "No email available",
+      phone_number: custId,
+      budget: 0,
+      preferred_location: "Not specified",
+      purchase_purpose: "Not specified"
+    };
+  }
+};
+
 // Fallback to get the latest call session
 const fetchLatestCallSession = async () => {
   try {
-    console.log("Fetching latest call session...");
+    console.log("🔍 Admin - Fetching latest call session...");
     const response = await axios.get(
       `${import.meta.env.VITE_API_BASE_URL}/call_session`
     );
-    console.log("All sessions response:", response.data);
+    console.log("📊 Admin - All sessions response:", response.data);
 
     if (response.data && response.data.length > 0) {
       // Get the most recent call session (assuming they're ordered by ID)
       const latestSession = response.data[response.data.length - 1];
-      console.log("Latest session found:", latestSession);
+      console.log("📊 Admin - Latest session found:", latestSession);
       callSessionData.value = latestSession;
       callStore.callSessionId = latestSession.id;
+      
+      // Fetch customer data for the latest session
+      if (latestSession.cust_id) {
+        await fetchCustomerData(latestSession.cust_id);
+      }
     } else {
-      console.log("No call sessions found, using demo data");
+      console.log("📊 Admin - No call sessions found, using demo data");
       // No call sessions found, use demo data
       callSessionData.value = getDemoData();
+      customerData.value = getDemoCustomerData();
     }
   } catch (err) {
     console.error("Error fetching latest call session:", err);
-    console.log("Falling back to demo data due to error");
+    console.log("📊 Admin - Falling back to demo data due to error");
     // Fallback to demo data
     callSessionData.value = getDemoData();
+    customerData.value = getDemoCustomerData();
   }
 };
 
-// Demo data fallback
+// Update call session data
+const updateCallSession = async () => {
+  if (!callSessionData.value?.id) {
+    showUpdateError.value = true;
+    updateErrorMessage.value = "No call session data to update";
+    return;
+  }
+
+  try {
+    updating.value = true;
+    
+    console.log("💾 Admin - Updating call session:", callSessionData.value.id);
+    
+    const updateData = {
+      cust_id: callSessionData.value.cust_id,
+      start_time: callSessionData.value.start_time,
+      end_time: callSessionData.value.end_time,
+      duration_secs: callSessionData.value.duration_secs,
+      positive: callSessionData.value.positive,
+      neutral: callSessionData.value.neutral,
+      negative: callSessionData.value.negative,
+      key_words: callSessionData.value.key_words,
+      summarized_content: callSessionData.value.summarized_content,
+      customer_suggestions: callSessionData.value.customer_suggestions,
+      admin_suggestions: callSessionData.value.admin_suggestions,
+    };
+
+    const response = await axios.put(
+      `${import.meta.env.VITE_API_BASE_URL}/call_session/${callSessionData.value.id}`,
+      updateData
+    );
+
+    console.log("✅ Admin - Call session updated successfully:", response.data);
+    callSessionData.value = response.data;
+    showUpdateSuccess.value = true;
+    
+  } catch (err) {
+    console.error("❌ Admin - Error updating call session:", err);
+    showUpdateError.value = true;
+    updateErrorMessage.value = err.response?.data?.detail || err.message;
+  } finally {
+    updating.value = false;
+  }
+};
+
+// Refresh all data
+const refreshData = async () => {
+  await fetchCallSessionData(callSessionData.value?.id);
+};
+
+// Demo data fallbacks
 const getDemoData = () => ({
   id: "demo",
-  cust_id: "Demo Customer",
+  cust_id: "+60123456789",
   duration: "5 min",
   start_time: new Date().toISOString(),
   positive: 70,
@@ -451,6 +627,28 @@ const getDemoData = () => ({
     "Set up actual call sessions to replace this demo.\nThe admin dashboard will show real call analytics.\nThis demo helps visualize the interface layout.",
 });
 
+const getDemoCustomerData = () => ({
+  first_name: "Demo",
+  last_name: "Customer",
+  email: "demo.customer@example.com",
+  phone_number: "+60123456789",
+  budget: 500000,
+  preferred_location: "Kuala Lumpur",
+  purchase_purpose: "Investment property"
+});
+
+// UI interaction functions
+const viewFullTranscript = () => {
+  // Navigate to transcript view or open modal
+  console.log("View full transcript clicked");
+};
+
+const viewCustomerProfile = () => {
+  // Navigate to customer profile or open modal
+  console.log("View customer profile clicked");
+};
+
+// Utility functions
 const formatDateTime = (dateString) => {
   if (!dateString) return "";
   const date = new Date(dateString);
