@@ -71,12 +71,12 @@
     </v-card>
 
     <!-- Suggestions -->
-    <v-card class="mb-6 rounded-lg mr-md-4 w-100 elevation-2">
+    <!-- <v-card class="mb-6 rounded-lg mr-md-4 w-100 elevation-2">
       <v-card-title class="text-h6 text-foreground"> Suggestions </v-card-title>
       <v-card-text
         class="d-flex flex-column ga-2 text-body-1 text-secForeground"
       >
-        <!-- Show skeleton loading while processing -->
+        
         <div v-if="(loading || isPolling) && customerNextSteps.length === 0" class="d-flex flex-column ga-2">
           <v-skeleton-loader
             v-for="n in 3"
@@ -85,22 +85,13 @@
             class="mb-2"
           ></v-skeleton-loader>
         </div>
-        <!-- Show actual content when available -->
+        
         <div v-else v-for="item in customerNextSteps" class="d-flex ga-2">
           <p>•</p>
           <p>{{ item }}</p>
         </div>
       </v-card-text>
-      <!-- <v-card-actions class="pa-2">
-        <v-btn
-          text
-          color="primary"
-          class="text-none px-2 text-capitalize"
-          @click="fullTranscript"
-          >View full transcript >
-        </v-btn>
-      </v-card-actions> -->
-    </v-card>
+    </v-card> -->
   </div>
 
   <!-- Action Buttons -->

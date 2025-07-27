@@ -428,6 +428,7 @@ const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
 const setupWebSocket = (sessionId: number): Promise<void> => {
   return new Promise((resolve, reject) => {
     const wsUrl = `ws://localhost:8000/ws/${sessionId}`
+    // const wsUrl = `ws://localhost:8000/ws/1`
     console.log("Connecting to FastAPI WebSocket:", wsUrl)
 
     websocket = new WebSocket(wsUrl)
