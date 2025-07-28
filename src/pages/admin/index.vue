@@ -5,7 +5,7 @@
       <h1>{{ pageTitle }}</h1>
 
       <!-- Appointment Tab Buttons -->
-      <div v-if="tab === 'app'" class="d-flex ga-3">
+      <!-- <div v-if="tab === 'app'" class="d-flex ga-3">
         <v-btn class="text-capitalize text-foreground">
           <ListFilter :size="20" class="mr-2" />
           Filter
@@ -14,7 +14,7 @@
           <Plus :size="20" class="mr-2" />
           Add Appointment
         </v-btn>
-      </div>
+      </div> -->
     </div>
     <p class="text-foreground pb-2 mb-4" v-if="tab === 'sum'">
       <span v-if="!loading && callSessionData && customerData">

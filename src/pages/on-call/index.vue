@@ -20,7 +20,7 @@
             {{
               callStore.status === "connecting"
                 ? "Connecting to AI Agent..."
-                : "Gina AI Agent"
+                : "Gina"
             }}
           </h1>
           <div

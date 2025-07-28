@@ -14,7 +14,7 @@
             </div>
           </div>
         </div>
-        
+
         <div class="header-stats d-flex justify-center align-center">
           <div class="response-counter" :data-empty="messages.length === 0">
             <v-icon size="12" class="counter-icon">mdi-message-text</v-icon>
@@ -64,42 +64,48 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, onMounted, ref, watch } from 'vue'
-  import { useCallStore } from '@/stores/call'
+import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { useCallStore } from "@/stores/call";
 
-  // Store and reactive data
-  const callStore = useCallStore()
-  const messagesContainer = ref<HTMLDivElement | null>(null)
+// Store and reactive data
+const callStore = useCallStore();
+const messagesContainer = ref<HTMLDivElement | null>(null);
 
-  // Computed properties - show only AI messages
-  const messages = computed(() => callStore.messages.filter(msg => msg.type === 'ai'))
+// Computed properties - show only AI messages
+const messages = computed(() =>
+  callStore.messages.filter((msg) => msg.type === "ai")
+);
 
-  // Helper function to format time
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
+// Helper function to format time
+const formatTime = (date: Date) => {
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
 
-  // Auto-scroll to bottom when new messages arrive
-  const scrollToBottom = () => {
-    nextTick(() => {
-      if (messagesContainer.value) {
-        messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-      }
-    })
-  }
+// Auto-scroll to bottom when new messages arrive
+const scrollToBottom = () => {
+  nextTick(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+    }
+  });
+};
 
-  // Watch for new messages and auto-scroll
-  watch(messages, () => {
-    scrollToBottom()
-  }, { deep: true })
+// Watch for new messages and auto-scroll
+watch(
+  messages,
+  () => {
+    scrollToBottom();
+  },
+  { deep: true }
+);
 
-  // Scroll to bottom on mount
-  onMounted(() => {
-    scrollToBottom()
-  })
+// Scroll to bottom on mount
+onMounted(() => {
+  scrollToBottom();
+});
 </script>
 
 <style scoped>
@@ -129,7 +135,7 @@
   background-color: rgba(var(--v-theme-on-surface), 0.05);
   border-radius: 12px;
   padding: 16px 20px;
-  margin-top:10px;
+  margin-top: 10px;
 }
 
 .header-title-section {
@@ -256,7 +262,7 @@
 
 .message-content-wrapper {
   background-color: rgb(var(--v-theme-primary));
-  color: white;
+  color: black;
   border-radius: 18px 4px 18px 18px;
   padding: 12px 16px;
   max-width: 100%;
@@ -279,21 +285,21 @@
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: rgba(255, 255, 255, 0.9);
+  color: black;
 }
 
 .message-content {
   font-size: 14px;
   line-height: 1.4;
   margin-bottom: 4px;
-  color: white;
+  color: black;
 }
 
 .message-time {
   font-size: 11px;
   opacity: 0.8;
   text-align: right;
-  color: rgba(255, 255, 255, 0.8);
+  color: black;
 }
 
 /* Scrollbar styling */
@@ -343,29 +349,29 @@
   .messages-list {
     gap: 12px;
   }
-  
+
   .chat-header {
     margin: 8px;
     margin-bottom: 6px;
   }
-  
+
   .header-content {
     padding: 12px 16px;
   }
-  
+
   .ai-indicator {
     gap: 10px;
   }
-  
+
   .ai-avatar {
     width: 24px !important;
     height: 24px !important;
   }
-  
+
   .header-title {
     font-size: 14px;
   }
-  
+
   .header-subtitle {
     font-size: 11px;
   }

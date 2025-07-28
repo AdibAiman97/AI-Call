@@ -5,8 +5,15 @@
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4"></v-progress-linear>
 
     <!-- Error state -->
-    <v-alert v-if="error" type="error" class="mb-4" dismissible @click:close="error = null">
-      {{ error }}
+    <v-alert v-if="error" type="warning" class="mb-4" dismissible @click:close="error = null">
+      <div class="d-flex align-center">
+        <v-icon class="mr-2">mdi-alert-circle</v-icon>
+        <div>
+          <strong>Appointment Service Issue</strong>
+          <br>
+          <small>{{ error }}</small>
+        </div>
+      </div>
     </v-alert>
     
     <v-calendar :interval-minutes="30" :interval-height="48" ref="calendar" v-model="value" :events="events"
@@ -19,8 +26,8 @@
 import { useDate } from "vuetify";
 import { Plus, ListFilter } from "lucide-vue-next";
 
-// API Configuration
-const API_BASE_URL = 'http://localhost:8000';
+// API Configuration - Use environment variable if available
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // Values
 const loading = ref(false);
@@ -90,6 +97,52 @@ const colors = [
   "calendarYellow",
 ];
 const titles = ["Meeting", "Holiday", "Workshop", "Appointment"];
+
+// Color mapping for appointment titles
+const titleColorMap = {
+  "Meeting": "calendarBlue",
+  "Holiday": "calendarRed", 
+  "Workshop": "calendarGreen",
+  "Appointment": "calendarYellow"
+};
+
+// Function to get color for appointment
+function getAppointmentColor(appointment) {
+  // Try to map by title first
+  if (titleColorMap[appointment.title]) {
+    return titleColorMap[appointment.title];
+  }
+  // Fall back to using appointment ID for consistent color
+  const colorIndex = appointment.id % colors.length;
+  return colors[colorIndex];
+}
+
+// Test API connection
+async function testApiConnection() {
+  try {
+    console.log('🔍 Testing API connection to:', API_BASE_URL);
+    const response = await fetch(`${API_BASE_URL}/appointments/`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    console.log('🔍 API Test Response status:', response.status);
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log('🔍 API Test successful. Sample data:', data);
+      return true;
+    } else {
+      console.warn('🔍 API Test failed with status:', response.status);
+      return false;
+    }
+  } catch (error) {
+    console.error('🔍 API Test connection failed:', error);
+    return false;
+  }
+}
 
 function rand(a, b) {
   return Math.floor((b - a + 1) * Math.random()) + a;
@@ -187,50 +240,73 @@ async function fetchAppointments(startDate, endDate) {
   error.value = null;
   
   try {
-    // const startISO = startDate.toISOString();
-    // const endISO = endDate.toISOString();
-    console.log('start', new Date(startDate))
-    console.log('end', new Date(endDate))
+    const startTime = new Date(startDate).toISOString();
+    const endTime = new Date(endDate).toISOString();
 
-    const startTime = new Date(startDate).toISOString()
-    const endTime = new Date(endDate).toISOString()
-
-    console.log('start', startTime)
-    console.log('end', endTime)
+    console.log('📅 Fetching appointments for date range:', {
+      startTime,
+      endTime,
+      apiUrl: API_BASE_URL
+    });
     
-    const response = await fetch(
-      `${API_BASE_URL}/appointments/date-range?start_date=${startTime}&end_date=${endTime}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+    const url = `${API_BASE_URL}/appointments/date-range?start_date=${encodeURIComponent(startTime)}&end_date=${encodeURIComponent(endTime)}`;
+    console.log('📅 API URL:', url);
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    console.log('📅 API Response status:', response.status);
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorText = await response.text();
+      console.error('📅 API Error Response:', errorText);
+      throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
     }
 
     const appointments = await response.json();
+    console.log('📅 Raw appointments data:', appointments);
+    
+    // Handle empty response
+    if (!Array.isArray(appointments)) {
+      console.warn('📅 Appointments response is not an array:', appointments);
+      events.value = [];
+      return;
+    }
+
+    if (appointments.length === 0) {
+      console.log('📅 No appointments found for the specified date range');
+      events.value = [];
+      return;
+    }
     
     // Transform API data to calendar event format
-    events.value = appointments.map(appointment => ({
-      id: appointment.id,
-      title: appointment.title,
-      start: new Date(appointment.start_time),
-      end: new Date(appointment.end_time),
-      color: colors[appointment.title] || 'calendarBlue',
-      callSessionId: appointment.call_session_id,
-      createdAt: appointment.created_at,
-      updatedAt: appointment.updated_at
-    }));
+    events.value = appointments.map(appointment => {
+      console.log('📅 Processing appointment:', appointment);
+      
+      return {
+        id: appointment.id,
+        title: appointment.title,
+        start: new Date(appointment.start_time),
+        end: new Date(appointment.end_time),
+        color: getAppointmentColor(appointment),
+        callSessionId: appointment.call_session_id,
+        createdAt: appointment.created_at,
+        updatedAt: appointment.updated_at
+      };
+    });
 
-    console.log('Fetched appointments:', events.value);
+    console.log('📅 Transformed calendar events:', events.value);
     
   } catch (err) {
-    console.error('Error fetching appointments:', err);
+    console.error('📅 Error fetching appointments:', err);
     error.value = `Failed to load appointments: ${err.message}`;
+    
+    // Fall back to empty events array
+    events.value = [];
   } finally {
     loading.value = false;
   }
@@ -243,10 +319,21 @@ onMounted(async () => {
   const startWeek = adapter.startOfWeek(today).setHours(0,0,0);
   const endWeek = adapter.endOfWeek(today).setHours(23,59,59);
 
-  // getEvents({ startWeek, endWeek });
-
-  // Initial load of appointments for current week
-  await fetchAppointments(startWeek, endWeek);
+  console.log('📅 Calendar component mounted. Testing API connection...');
+  
+  // Test API connection first
+  const apiConnected = await testApiConnection();
+  
+  if (apiConnected) {
+    console.log('📅 API connection successful. Fetching appointments...');
+    // Initial load of appointments for current week
+    await fetchAppointments(startWeek, endWeek);
+  } else {
+    console.warn('📅 API connection failed. Using sample data...');
+    error.value = 'Unable to connect to appointment service. Using sample data.';
+    // Keep the existing sample events as fallback
+    // events.value remains with the hardcoded sample data
+  }
 });
 
 // Expose functions for potential external use
