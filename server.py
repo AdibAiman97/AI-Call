@@ -990,7 +990,7 @@ class GeminiLiveConnection:
 
                             APPOINTMENT BOOKING PROCESS:
                             When customers show interest in booking:
-                            1. Call get_current_appointments() to check availability
+                            1. Call get_current_appointments() to check availability, if available, proceed to step 2, confirm the appointment with the customer.
                             2. Gather customer details: full name, phone number, preferred date/time
                             3. When customer confirms booking, immediately call store_appointment_details() with format:
                                "Customer: [Full Name], Phone: [Phone Number], Date: [Date], Time: [Time], Purpose: [Property viewing/consultation], Notes: [Any special requests]"
