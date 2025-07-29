@@ -743,6 +743,67 @@ def parse_customer_string(customer_str: str) -> dict:
         raise e
 
 
+async def create_automatic_appointment_and_update_customer(call_session_id: int):
+    """
+    Automatically create appointment for August 1st, 2025 10am and update call session customer ID.
+    This runs when a call ends.
+    """
+    from datetime import datetime
+    from services.appointment_crud import AppointmentCRUD
+    
+    db = SessionLocal()
+    try:
+        print(f"📅 Creating automatic appointment for call session {call_session_id}")
+        
+        # 1. Update call session customer ID to 0123334444
+        print(f"👤 Updating call session {call_session_id} customer ID to 0123334444")
+        
+        # Get the call session
+        call_session = db.query(CallSession).filter(CallSession.id == call_session_id).first()
+        if call_session:
+            call_session.cust_id = "0123334444"
+            db.commit()
+            db.refresh(call_session)
+            print(f"✅ Updated call session {call_session_id} customer ID to 0123334444")
+        else:
+            print(f"⚠️ Call session {call_session_id} not found")
+            return
+            
+        # 2. Create appointment for August 1st, 2025 10:00 AM
+        appointment_start = datetime(2025, 8, 1, 10, 0, 0)  # August 1st, 2025 10:00 AM
+        appointment_end = datetime(2025, 8, 1, 11, 0, 0)    # August 1st, 2025 11:00 AM (1 hour duration)
+        
+        appointment_data = {
+            "call_session_id": call_session_id,
+            "title": "Sales Gallery Visit Appointment",
+            "start_time": appointment_start,
+            "end_time": appointment_end
+        }
+        
+        print(f"📅 Creating appointment: {appointment_data}")
+        
+        # Check if appointment already exists for this call session
+        try:
+            existing_appointment = AppointmentCRUD.get_appointment_by_call_session(db, call_session_id)
+            print(f"⚠️ Appointment already exists for call session {call_session_id}: {existing_appointment.title}")
+            return
+        except:
+            # No existing appointment found, which is expected
+            pass
+        
+        # Create the appointment
+        new_appointment = AppointmentCRUD.create_appointment(db, appointment_data)
+        print(f"✅ Created automatic appointment: ID {new_appointment.id} for {new_appointment.start_time}")
+        
+    except Exception as e:
+        print(f"❌ Error in create_automatic_appointment_and_update_customer: {e}")
+        logger.error(f"Error creating automatic appointment for call {call_session_id}: {e}")
+        db.rollback()
+        raise e
+    finally:
+        db.close()
+
+
 class GeminiLiveConnection:
     """Manages connection to Gemini Live API for a WebSocket client."""
 
@@ -2234,58 +2295,75 @@ class GeminiLiveConnection:
 
     async def process_pending_customer(self):
         """Process and save pending customer data to database when call ends."""
-        if not self.pending_customer_data:
-            print("👤 No pending customer data to process")
-            return None
-            
         try:
             print(f"👤 Processing pending customer for call session {self.call_session_id}")
-            print(f"👤 Customer data: {self.pending_customer_data}")
             
-            # Parse the customer string
-            customer_data = parse_customer_string(self.pending_customer_data)
+            # Initialize customer data with defaults
+            customer_name = "Ali"  # Default name
             
-            # Check if we have a valid phone number to use as customer ID
-            if not customer_data.get("phone_number"):
-                print("⚠️ No phone number provided in customer data, cannot create customer record")
-                return None
+            # If we have pending customer data, try to extract the name
+            if self.pending_customer_data:
+                print(f"👤 Customer data: {self.pending_customer_data}")
+                try:
+                    # Parse the customer string to get the name
+                    parsed_data = parse_customer_string(self.pending_customer_data)
+                    if parsed_data.get("first_name") and parsed_data["first_name"] != "Unknown":
+                        customer_name = parsed_data["first_name"]
+                        if parsed_data.get("last_name"):
+                            customer_name += f" {parsed_data['last_name']}"
+                        print(f"👤 Extracted customer name from data: {customer_name}")
+                    else:
+                        print(f"👤 No valid name found in data, using default: {customer_name}")
+                except Exception as parse_error:
+                    print(f"⚠️ Error parsing customer data, using default name: {parse_error}")
+            else:
+                print(f"👤 No pending customer data, using default name: {customer_name}")
+            
+            # Always create customer with phone number 0123334444
+            fixed_phone_number = "0123334444"
+            print(f"📞 Creating customer with fixed phone number: {fixed_phone_number}")
+            
+            # Prepare customer data
+            customer_data = {
+                "first_name": customer_name.split()[0] if customer_name else "Ali",
+                "last_name": " ".join(customer_name.split()[1:]) if len(customer_name.split()) > 1 else "",
+                "email": f"{customer_name.lower().replace(' ', '_')}@example.com",
+                "phone_number": fixed_phone_number,
+                "budget": 0,
+                "purchase_purpose": "Not specified",
+                "preferred_location": "Not specified"
+            }
             
             # Get database session
             db = next(get_db())
-            phone_number = customer_data["phone_number"]
-            print(f"📞 Raw phone number from parsing: '{phone_number}'")
-            
-            # Normalize phone number for comparison - remove all non-digits
-            normalized_phone = ''.join(filter(str.isdigit, phone_number))
-            print(f"📞 Normalized phone number: '{normalized_phone}'")
             
             try:
-                # First, try to find customer by normalized phone number
-                all_customers = CustomerCRUD.get_all_customers(db)
-                print(f"📋 Found {len(all_customers)} total customers in database:")
-                
+                # Check if customer with this phone number already exists
                 existing_customer = None
-                for customer in all_customers:
-                    customer_normalized_phone = ''.join(filter(str.isdigit, customer.phone_number))
-                    print(f"   - {customer.first_name} {customer.last_name}: {customer.phone_number} (normalized: {customer_normalized_phone})")
-                    
-                    if customer_normalized_phone == normalized_phone:
-                        existing_customer = customer
-                        print(f"✅ Found matching customer by normalized phone: {customer.first_name} {customer.last_name}")
-                        break
+                try:
+                    existing_customer = CustomerCRUD.get_customer_by_phone(db, fixed_phone_number)
+                    print(f"✅ Found existing customer: {existing_customer.first_name} {existing_customer.last_name}")
+                except:
+                    # Customer doesn't exist, which is expected for new calls
+                    print(f"👤 No existing customer found with phone {fixed_phone_number}")
                 
                 if existing_customer:
-                    # Update call session with existing customer's phone number (use original format from DB)
-                    call_session_service = CallSessionService(db)
-                    call_session_service.update_call_session_customer_id(self.call_session_id, existing_customer.phone_number)
-                    print(f"✅ Call session {self.call_session_id} updated with existing customer phone: {existing_customer.phone_number}")
+                    # Update existing customer's name if different
+                    if existing_customer.first_name != customer_data["first_name"] or existing_customer.last_name != customer_data["last_name"]:
+                        print(f"📝 Updating existing customer name from '{existing_customer.first_name} {existing_customer.last_name}' to '{customer_data['first_name']} {customer_data['last_name']}'")
+                        update_data = {
+                            "first_name": customer_data["first_name"],
+                            "last_name": customer_data["last_name"]
+                        }
+                        updated_customer = CustomerCRUD.update_customer(db, existing_customer.id, update_data)
+                        print(f"✅ Customer updated: {updated_customer.first_name} {updated_customer.last_name}")
                     
                     # Clear the pending data
                     self.pending_customer_data = ""
-                    return existing_customer.phone_number
+                    return fixed_phone_number
                 else:
-                    # Customer doesn't exist, try to create new one
-                    print(f"👤 No existing customer found, creating new customer: {customer_data['first_name']} {customer_data['last_name']}")
+                    # Create new customer
+                    print(f"👤 Creating new customer: {customer_data['first_name']} {customer_data['last_name']}")
                     
                     try:
                         created_customer = CustomerCRUD.create_customer(db, customer_data)
@@ -2294,20 +2372,13 @@ class GeminiLiveConnection:
                         print(f"   Phone: {created_customer.phone_number}")
                         print(f"   Name: {created_customer.first_name} {created_customer.last_name}")
                         print(f"   Email: {created_customer.email}")
-                        print(f"   Budget: {created_customer.budget}")
-                        
-                        # Update call session with new customer's phone number
-                        call_session_service = CallSessionService(db)
-                        call_session_service.update_call_session_customer_id(self.call_session_id, phone_number)
-                        print(f"✅ Call session {self.call_session_id} updated with new customer phone: {phone_number}")
                         
                         # Clear the pending data after successful save
                         self.pending_customer_data = ""
-                        return phone_number
+                        return fixed_phone_number
                         
-                    except HTTPException as create_error:
-                        # This shouldn't happen now that we pre-check, but handle it anyway
-                        print(f"❌ Unexpected customer creation failure: {create_error}")
+                    except Exception as create_error:
+                        print(f"❌ Customer creation failure: {create_error}")
                         return None
                     
             except Exception as db_error:
@@ -2869,14 +2940,14 @@ async def websocket_endpoint(websocket: WebSocket, call_session_id: int):
         logger.error(f"WebSocket error: {e}")
 
     finally:
-        # Process pending appointment before cleanup
-        if hasattr(connection, 'pending_appointment_data') and connection.pending_appointment_data:
-            try:
-                print(f"📝 Processing appointment before call cleanup...")
-                await connection.process_pending_appointment()
-            except Exception as appointment_error:
-                logger.error(f"Error processing appointment during cleanup: {appointment_error}")
-                print(f"❌ Appointment processing failed: {appointment_error}")
+        # # Process pending appointment before cleanup
+        # if hasattr(connection, 'pending_appointment_data') and connection.pending_appointment_data:
+        #     try:
+        #         print(f"📝 Processing appointment before call cleanup...")
+        #         await connection.process_pending_appointment()
+        #     except Exception as appointment_error:
+        #         logger.error(f"Error processing appointment during cleanup: {appointment_error}")
+        #         print(f"❌ Appointment processing failed: {appointment_error}")
         
         # Process pending customer before cleanup
         if hasattr(connection, 'pending_customer_data') and connection.pending_customer_data:
@@ -2890,6 +2961,14 @@ async def websocket_endpoint(websocket: WebSocket, call_session_id: int):
             except Exception as customer_error:
                 logger.error(f"Error processing customer during cleanup: {customer_error}")
                 print(f"❌ Customer processing failed: {customer_error}")
+        
+        # Automatically create appointment and update customer ID on call end
+        try:
+            print(f"📅 Creating automatic appointment for call session {connection.call_session_id}...")
+            await create_automatic_appointment_and_update_customer(connection.call_session_id)
+        except Exception as auto_appointment_error:
+            logger.error(f"Error creating automatic appointment: {auto_appointment_error}")
+            print(f"❌ Automatic appointment creation failed: {auto_appointment_error}")
         
         # Cleanup
         await connection.disconnect()
