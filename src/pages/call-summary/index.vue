@@ -71,7 +71,7 @@
     </v-card>
 
     <!-- Suggestions -->
-    <!-- <v-card class="mb-6 rounded-lg mr-md-4 w-100 elevation-2">
+    <v-card class="mb-6 rounded-lg mr-md-4 w-100 elevation-2">
       <v-card-title class="text-h6 text-foreground"> Suggestions </v-card-title>
       <v-card-text
         class="d-flex flex-column ga-2 text-body-1 text-secForeground"
@@ -91,7 +91,7 @@
           <p>{{ item }}</p>
         </div>
       </v-card-text>
-    </v-card> -->
+    </v-card>
   </div>
 
   <!-- Action Buttons -->
