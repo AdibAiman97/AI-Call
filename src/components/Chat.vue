@@ -41,7 +41,7 @@
           <div class="message-bubble ai-message-right">
             <div class="message-content-wrapper">
               <div class="message-header">
-                <v-icon class="mr-1" size="16">mdi-robot</v-icon>
+                <v-icon class="mr-1" size="16" color="black">mdi-robot</v-icon>
                 <span class="message-label">AI Assistant</span>
               </div>
               <div class="message-content">
@@ -51,11 +51,11 @@
                 {{ formatTime(new Date(message.timestamp)) }}
               </div>
             </div>
-            <div class="message-avatar">
-              <v-avatar color="primary" size="32">
+            <!-- <div class="message-avatar mt-2">
+              <v-avatar color="transparent" size="32" >
                 <v-icon color="white">mdi-robot</v-icon>
               </v-avatar>
-            </div>
+            </div> -->
           </div>
         </div>
       </div>
@@ -271,6 +271,7 @@ onMounted(() => {
 
 .message-header {
   display: flex;
+  justify-content: flex-end;
   align-items: center;
   margin-bottom: 6px;
   opacity: 0.9;
