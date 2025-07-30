@@ -2,17 +2,13 @@
   <div class="on-call-container">
     <!-- Main call interface -->
     <div class="main-call-area">
-      <div class="d-flex flex-column align-center justify-center ga-6">
+      <div class="d-flex flex-column align-center justify-center">
         <div class="d-flex flex-column align-center justify-center">
           <!-- DANCING BLOB -->
           <div class="dancing-blob-container">
             <TresCanvas :alpha="true">
               <Suspense>
-                <DancingBlob
-                  :analyser="analyser"
-                  :dataArray="dataArray"
-                  :isAudioPlaying="callStore.isPlayingAudio"
-                />
+                <DancingBlob :analyser="analyser" :dataArray="dataArray" :isAudioPlaying="callStore.isPlayingAudio" />
               </Suspense>
             </TresCanvas>
           </div>
@@ -23,10 +19,7 @@
                 : "Gina"
             }}
           </h1>
-          <div
-            v-if="callStore.status === 'connecting'"
-            class="connecting-indicator"
-          >
+          <div v-if="callStore.status === 'connecting'" class="connecting-indicator">
             <div class="connecting-dots">
               <div class="dot"></div>
               <div class="dot"></div>
@@ -47,14 +40,7 @@
             </v-icon>
           </v-btn>
 
-          <v-btn
-            @click="endCall"
-            to="/call-summary"
-            class="bg-error"
-            size="70"
-            rounded="circle"
-            :loading="isEnding"
-          >
+          <v-btn @click="endCall" to="/call-summary" class="bg-error" size="70" rounded="circle" :loading="isEnding">
             <v-icon color="white">
               <Phone />
             </v-icon>
@@ -62,12 +48,12 @@
         </div>
       </div>
     </div>
-    
+
     <!-- Integrated chat panel -->
     <div class="chat-section">
       <Chat />
     </div>
-    
+
     <!-- Hidden audio processing component -->
     <GeminiLive ref="geminiLiveRef" />
   </div>
@@ -177,7 +163,8 @@ onUnmounted(() => {
 <style scoped>
 .on-call-container {
   display: flex;
-  height: calc(100vh - 64px); /* Account for header height */
+  /* height: calc(100vh - 64px); */
+  height: 100%;
   width: 100%;
   background-color: rgb(var(--v-theme-background));
 }
@@ -187,7 +174,7 @@ onUnmounted(() => {
   display: flex;
   align-items: start;
   justify-content: center;
-  padding: 68px 20px;
+  /* padding: 68px 20px; */
   background-color: rgb(var(--v-theme-background));
 }
 
@@ -248,12 +235,14 @@ onUnmounted(() => {
 }
 
 @keyframes dot-pulse {
+
   0%,
   80%,
   100% {
     transform: scale(0);
     opacity: 0.5;
   }
+
   40% {
     transform: scale(1);
     opacity: 1;
@@ -266,7 +255,7 @@ onUnmounted(() => {
     width: 350px;
     min-width: 350px;
   }
-  
+
   .dancing-blob-container {
     height: 350px;
     width: 400px;
@@ -279,13 +268,13 @@ onUnmounted(() => {
     height: auto;
     min-height: calc(100vh - 64px);
   }
-  
+
   .main-call-area {
     flex: none;
     min-height: 60vh;
     padding: 20px;
   }
-  
+
   .chat-section {
     width: 100%;
     min-width: auto;
@@ -293,7 +282,7 @@ onUnmounted(() => {
     border-left: none;
     border-top: 2px solid rgb(var(--v-theme-surface));
   }
-  
+
   .dancing-blob-container {
     height: 300px;
     width: 350px;
@@ -305,7 +294,7 @@ onUnmounted(() => {
     height: 250px;
     width: 300px;
   }
-  
+
   .main-call-area {
     padding: 15px;
   }
