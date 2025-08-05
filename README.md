@@ -39,4 +39,4 @@ The project is divided into two main parts: the frontend (`voxis-ai`) and the ba
 
 # 4) Project Preview
 
-(No preview available yet.)
+<img width="800" height="600" alt="image" src="https://github.com/user-attachments/assets/8233fb4b-6c59-416b-afde-86c1f8122a2e" />
