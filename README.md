@@ -20,22 +20,10 @@ A web-based application designed for AI-powered call management and communicatio
 
 # 3) Project Structure
 
-The project is divided into two main parts: the frontend (`voxis-ai`) and the backend (`voxis-ai-be`).
+The project is divided into two main parts: the frontend and the backend.
 
-*   `voxis-ai/`: Frontend application
-    *   `src/components/`: Reusable Vue components.
-    *   `src/pages/`: Vue views/pages for different routes.
-    *   `src/stores/`: Pinia stores for state management.
-    *   `src/router/`: Vue Router configuration for navigation.
-    *   `src/utils/`: Utility functions and helpers.
-    *   `public/`: Static assets and client-side processing scripts (e.g., `processor.js`).
-*   `voxis-ai-be/`: Backend application
-    *   `api/`: FastAPI routers defining API endpoints.
-    *   `ai_services/`: Modules containing AI-related services and tools.
-    *   `database/`: Database connection, schemas, and models.
-    *   `services/`: Business logic and CRUD operations.
-    *   `VertexRagSystem/`: Components related to the Retrieval Augmented Generation (RAG) system.
-    *   `rag_prev_version/`: Contains previous iterations or versions of the RAG implementation.
+  * (Frontend): Contains the Vue.js application with components, pages, state management (Pinia), routing, and utility functions.
+  * (Backend): Houses the Python FastAPI application, including API endpoints, AI services, database interactions, business logic, and RAG system components.
 
 # 4) Project Preview
 
