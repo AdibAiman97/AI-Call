@@ -28,3 +28,5 @@ The project is divided into two main parts: the frontend and the backend.
 # 4) Project Preview
 
 <img width="800" height="600" alt="image" src="https://github.com/user-attachments/assets/8233fb4b-6c59-416b-afde-86c1f8122a2e" />
+<img width="800" height="600" alt="image" src="https://github.com/user-attachments/assets/0fc0015d-49c1-4eea-9cc3-87726a5ebb9d" />
+<img width="800" height="600" alt="image" src="https://github.com/user-attachments/assets/a3403da6-7dc0-40bb-bbbd-ca6167fbb78f" />
